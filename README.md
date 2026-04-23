@@ -82,7 +82,7 @@
 | **Frontend** | React + TailwindCSS + Axios | Node 20 |
 | **Backend** | Spring Boot + JPA + Spring Security | Java 17 |
 | **AI Server** | FastAPI + PyTorch + YOLOv8 | Python 3.10+ |
-| **LLM** | Ollama (4-bit GGUF 양자화) | Latest |
+| **LLM** | Google Vertex AI Gemini 1.5 Flash/Pro | - |
 | **RAG 임베딩** | BGE-M3 (FlagEmbedding) | - |
 | **DB** | PostgreSQL 16 + pgvector | - |
 | **Cache** | Redis 7 | - |
@@ -383,14 +383,19 @@ MASTER_IP=192.168.0.100          # Master PC IP (변경 금지)
 MODULE_NAME=skin                 # 본인 담당 질환으로 변경
 ```
 
-### Step 2 — Ollama 모델 다운로드 (최초 1회, 시간 걸림)
+### Step 2 — GCP 서비스 계정 키 준비
+
+1. [Google Cloud Console](https://console.cloud.google.com) → **IAM & Admin** → **Service Accounts**
+2. 서비스 계정 생성 → 역할: `Vertex AI User`
+3. 키 생성 (JSON) → 다운로드
+4. 키 파일을 `secrets/gcp-key.json` 경로에 저장
 
 ```bash
-docker compose -f docker-compose.worker.yml up ollama -d
-
-# 컨테이너 안에서 모델 다운로드
-docker exec -it medizero-ollama-skin ollama pull llama3.2:3b-instruct-q4_K_M
+mkdir secrets
+# 다운로드한 키 파일을 secrets/gcp-key.json 으로 복사
 ```
+
+> ⚠️ `secrets/` 폴더는 `.gitignore`에 등록되어 있어 git에 올라가지 않습니다.
 
 ### Step 3 — 워커 서버 실행
 

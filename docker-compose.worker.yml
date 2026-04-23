@@ -1,35 +1,41 @@
 # ================================================================
-# MEDI-Zero Worker PC docker-compose (템플릿)
-# 각 워커 PC에서 복사 후 MODULE_NAME과 포트만 변경해서 실행
+# MEDI-Zero Worker PC docker-compose (Vertex AI Gemini 버전)
+# Ollama 제거 → 워커 PC RAM 사용량 ~11GB → ~4GB 로 감소
 #
 # 실행: docker compose -f docker-compose.worker.yml up -d
 #
 # [워커별 MODULE_NAME]
-# skin   | brain  | eyes
-# spine  | kidney | colon
+# skin | brain | eyes | spine | kidney | colon
 # ================================================================
 
 services:
 
-  # ── FastAPI AI 서버 ───────────────────────────────────────────
   ai-server:
     build:
       context: ./AI
       dockerfile: Dockerfile
     container_name: medizero-ai-${MODULE_NAME:-skin}
     restart: unless-stopped
-    depends_on:
-      ollama:
-        condition: service_healthy
     environment:
       MODULE_NAME: ${MODULE_NAME:-skin}
-      # Master PC의 PostgreSQL에 직접 접속 (RAG 벡터 검색용)
+
+      # Master PC PostgreSQL 접속 (RAG 벡터 검색)
       DB_URL: postgresql://medizero:${DB_PASSWORD}@${MASTER_IP:-192.168.0.100}:5432/medizerodb
-      OLLAMA_URL: http://ollama:11434
+
+      # Google Vertex AI 설정
+      GCP_PROJECT_ID: ${GCP_PROJECT_ID}
+      GCP_LOCATION: ${GCP_LOCATION:-asia-northeast3}   # 서울 리전
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-1.5-flash-001}
+
+      # 서비스 계정 키 파일 경로 (컨테이너 내부 경로)
+      GOOGLE_APPLICATION_CREDENTIALS: /secrets/gcp-key.json
+
     ports:
       - "8000:8000"
     volumes:
       - ai_models:/app/models
+      # GCP 서비스 계정 키 파일 마운트 (읽기 전용)
+      - ${GCP_KEY_PATH:-./secrets/gcp-key.json}:/secrets/gcp-key.json:ro
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"]
       interval: 15s
@@ -39,33 +45,12 @@ services:
     deploy:
       resources:
         limits:
-          # BGE-M3(2.2GB) + FastAPI(1GB) = 3.2GB
+          # BGE-M3(2.2GB) + FastAPI(1GB) + 여유 = 4GB
+          # Ollama 제거로 기존 11GB → 4GB 절약
           memory: 4g
-
-  # ── Ollama (4-bit GGUF 양자화 LLM) ───────────────────────────
-  ollama:
-    image: ollama/ollama:latest
-    container_name: medizero-ollama-${MODULE_NAME:-skin}
-    restart: unless-stopped
-    ports:
-      - "11434:11434"
-    volumes:
-      - ollama_models:/root/.ollama
-    healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:11434/api/tags || exit 1"]
-      interval: 20s
-      timeout: 10s
-      retries: 5
-      start_period: 60s
-    deploy:
-      resources:
-        limits:
-          # 4-bit GGUF 7B 모델 기준 ~4GB, 안전 마진 포함
-          memory: 10g
 
 volumes:
   ai_models:
-  ollama_models:
 
 networks:
   default:
