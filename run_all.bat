@@ -23,7 +23,7 @@ echo.
 echo [2/4] DB 헬스체크 대기 중 (최대 30초)...
 set /a count=0
 :wait_loop
-    docker inspect --format="{{.State.Health.Status}}" medizero-postgres 2>nul | findstr "healthy" > nul
+    docker inspect --format="{{.State.Health.Status}}" medicore-postgres 2>nul | findstr "healthy" > nul
     if %errorlevel% equ 0 goto db_ready
     set /a count+=1
     if %count% geq 15 (

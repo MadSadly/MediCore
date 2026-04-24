@@ -14,13 +14,13 @@ services:
     build:
       context: ./AI
       dockerfile: Dockerfile
-    container_name: medizero-ai-${MODULE_NAME:-skin}
+    container_name: medicore-ai-${MODULE_NAME:-skin}
     restart: unless-stopped
     environment:
       MODULE_NAME: ${MODULE_NAME:-skin}
 
       # Master PC PostgreSQL 접속 (RAG 벡터 검색)
-      DB_URL: postgresql://medizero:${DB_PASSWORD}@${MASTER_IP:-192.168.0.100}:5432/medizerodb
+      DB_URL: postgresql://medicore:${DB_PASSWORD}@${MASTER_IP:-192.168.0.100}:5432/medicoredb
 
       # Google Vertex AI 설정
       GCP_PROJECT_ID: ${GCP_PROJECT_ID}
@@ -53,4 +53,4 @@ volumes:
 
 networks:
   default:
-    name: medizero-worker-network
+    name: medicore-worker-network

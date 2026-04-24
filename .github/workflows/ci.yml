@@ -54,13 +54,13 @@ jobs:
       postgres:
         image: pgvector/pgvector:pg16
         env:
-          POSTGRES_DB: medizerodb
-          POSTGRES_USER: medizero
+          POSTGRES_DB: medicoredb
+          POSTGRES_USER: medicore
           POSTGRES_PASSWORD: ci_test_password
         ports:
           - 5432:5432
         options: >-
-          --health-cmd "pg_isready -U medizero -d medizerodb"
+          --health-cmd "pg_isready -U medicore -d medicoredb"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
@@ -94,8 +94,8 @@ jobs:
         run: ./gradlew test --no-daemon
         env:
           SPRING_PROFILES_ACTIVE: local
-          SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/medizerodb
-          SPRING_DATASOURCE_USERNAME: medizero
+          SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/medicoredb
+          SPRING_DATASOURCE_USERNAME: medicore
           SPRING_DATASOURCE_PASSWORD: ci_test_password
           SPRING_DATA_REDIS_HOST: localhost
           SPRING_DATA_REDIS_PORT: 6379
@@ -140,7 +140,7 @@ jobs:
   # ─────────────────────────────────────────
   # GitHub Container Registry 이미지 빌드 & 푸시 (main push 시만)
   # 별도 계정 불필요 - GitHub 토큰 자동 사용
-  # 이미지 주소: ghcr.io/MadSadly/medizero-xxx:latest
+  # 이미지 주소: ghcr.io/MadSadly/medicore-xxx:latest
   # ─────────────────────────────────────────
   docker-push:
     name: GitHub Container Registry Push

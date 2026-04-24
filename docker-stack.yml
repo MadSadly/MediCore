@@ -1,7 +1,7 @@
 # ================================================================
 # MEDI-Zero Docker Swarm Stack
 # 조장 마스터 PC에서 실행:
-#   docker stack deploy -c docker-stack.yml medizero
+#   docker stack deploy -c docker-stack.yml medicore
 # ================================================================
 
 version: '3.8'
@@ -12,8 +12,8 @@ services:
   postgres:
     image: pgvector/pgvector:pg16
     environment:
-      POSTGRES_DB: medizerodb
-      POSTGRES_USER: medizero
+      POSTGRES_DB: medicoredb
+      POSTGRES_USER: medicore
       POSTGRES_PASSWORD: ${DB_PASSWORD}
     volumes:
       - postgres_data:/var/lib/postgresql/data
@@ -24,7 +24,7 @@ services:
         constraints:
           - node.role == manager   # 마스터 PC에서만 실행
     networks:
-      - medizero-overlay
+      - medicore-overlay
 
   # ── Redis ─────────────────────────────────────────────────────
   redis:
@@ -36,15 +36,15 @@ services:
         constraints:
           - node.role == manager
     networks:
-      - medizero-overlay
+      - medicore-overlay
 
   # ── Spring Boot ───────────────────────────────────────────────
   backend:
     image: ghcr.io/madsadly/medicore-backend:latest
     environment:
       SPRING_PROFILES_ACTIVE: prod
-      DB_URL: jdbc:postgresql://postgres:5432/medizerodb
-      DB_USERNAME: medizero
+      DB_URL: jdbc:postgresql://postgres:5432/medicoredb
+      DB_USERNAME: medicore
       DB_PASSWORD: ${DB_PASSWORD}
       REDIS_HOST: redis
       REDIS_PORT: 6379
@@ -64,7 +64,7 @@ services:
         constraints:
           - node.role == manager
     networks:
-      - medizero-overlay
+      - medicore-overlay
 
   # ── React Frontend ────────────────────────────────────────────
   frontend:
@@ -77,14 +77,14 @@ services:
         constraints:
           - node.role == manager
     networks:
-      - medizero-overlay
+      - medicore-overlay
 
   # ── AI 워커: 피부 ─────────────────────────────────────────────
   ai-skin:
     image: ghcr.io/madsadly/medicore-ai:latest
     environment:
       MODULE_NAME: skin
-      DB_URL: postgresql://medizero:${DB_PASSWORD}@postgres:5432/medizerodb
+      DB_URL: postgresql://medicore:${DB_PASSWORD}@postgres:5432/medicoredb
       GCP_PROJECT_ID: ${GCP_PROJECT_ID}
       GCP_LOCATION: ${GCP_LOCATION:-asia-northeast3}
       GEMINI_MODEL: ${GEMINI_MODEL:-gemini-1.5-flash-001}
@@ -97,14 +97,14 @@ services:
         constraints:
           - node.labels.module == skin   # 피부 담당 PC에만 배포
     networks:
-      - medizero-overlay
+      - medicore-overlay
 
   # ── AI 워커: 뇌종양 ───────────────────────────────────────────
   ai-brain:
     image: ghcr.io/madsadly/medicore-ai:latest
     environment:
       MODULE_NAME: brain
-      DB_URL: postgresql://medizero:${DB_PASSWORD}@postgres:5432/medizerodb
+      DB_URL: postgresql://medicore:${DB_PASSWORD}@postgres:5432/medicoredb
       GCP_PROJECT_ID: ${GCP_PROJECT_ID}
       GCP_LOCATION: ${GCP_LOCATION:-asia-northeast3}
       GEMINI_MODEL: ${GEMINI_MODEL:-gemini-1.5-flash-001}
@@ -117,14 +117,14 @@ services:
         constraints:
           - node.labels.module == brain
     networks:
-      - medizero-overlay
+      - medicore-overlay
 
   # ── AI 워커: 안과 ─────────────────────────────────────────────
   ai-eyes:
     image: ghcr.io/madsadly/medicore-ai:latest
     environment:
       MODULE_NAME: eyes
-      DB_URL: postgresql://medizero:${DB_PASSWORD}@postgres:5432/medizerodb
+      DB_URL: postgresql://medicore:${DB_PASSWORD}@postgres:5432/medicoredb
       GCP_PROJECT_ID: ${GCP_PROJECT_ID}
       GCP_LOCATION: ${GCP_LOCATION:-asia-northeast3}
       GEMINI_MODEL: ${GEMINI_MODEL:-gemini-1.5-flash-001}
@@ -137,14 +137,14 @@ services:
         constraints:
           - node.labels.module == eyes
     networks:
-      - medizero-overlay
+      - medicore-overlay
 
   # ── AI 워커: 척추 ─────────────────────────────────────────────
   ai-spine:
     image: ghcr.io/madsadly/medicore-ai:latest
     environment:
       MODULE_NAME: spine
-      DB_URL: postgresql://medizero:${DB_PASSWORD}@postgres:5432/medizerodb
+      DB_URL: postgresql://medicore:${DB_PASSWORD}@postgres:5432/medicoredb
       GCP_PROJECT_ID: ${GCP_PROJECT_ID}
       GCP_LOCATION: ${GCP_LOCATION:-asia-northeast3}
       GEMINI_MODEL: ${GEMINI_MODEL:-gemini-1.5-flash-001}
@@ -157,14 +157,14 @@ services:
         constraints:
           - node.labels.module == spine
     networks:
-      - medizero-overlay
+      - medicore-overlay
 
   # ── AI 워커: 신장 ─────────────────────────────────────────────
   ai-kidney:
     image: ghcr.io/madsadly/medicore-ai:latest
     environment:
       MODULE_NAME: kidney
-      DB_URL: postgresql://medizero:${DB_PASSWORD}@postgres:5432/medizerodb
+      DB_URL: postgresql://medicore:${DB_PASSWORD}@postgres:5432/medicoredb
       GCP_PROJECT_ID: ${GCP_PROJECT_ID}
       GCP_LOCATION: ${GCP_LOCATION:-asia-northeast3}
       GEMINI_MODEL: ${GEMINI_MODEL:-gemini-1.5-flash-001}
@@ -177,14 +177,14 @@ services:
         constraints:
           - node.labels.module == kidney
     networks:
-      - medizero-overlay
+      - medicore-overlay
 
   # ── AI 워커: 대장암 ───────────────────────────────────────────
   ai-colon:
     image: ghcr.io/madsadly/medicore-ai:latest
     environment:
       MODULE_NAME: colon
-      DB_URL: postgresql://medizero:${DB_PASSWORD}@postgres:5432/medizerodb
+      DB_URL: postgresql://medicore:${DB_PASSWORD}@postgres:5432/medicoredb
       GCP_PROJECT_ID: ${GCP_PROJECT_ID}
       GCP_LOCATION: ${GCP_LOCATION:-asia-northeast3}
       GEMINI_MODEL: ${GEMINI_MODEL:-gemini-1.5-flash-001}
@@ -197,11 +197,11 @@ services:
         constraints:
           - node.labels.module == colon
     networks:
-      - medizero-overlay
+      - medicore-overlay
 
 volumes:
   postgres_data:
 
 networks:
-  medizero-overlay:
+  medicore-overlay:
     driver: overlay

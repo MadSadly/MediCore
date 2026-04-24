@@ -5,11 +5,11 @@ services:
   # ─────────────────────────────────────────
   postgres:
     image: pgvector/pgvector:pg16
-    container_name: medizero-postgres
+    container_name: medicore-postgres
     restart: unless-stopped
     environment:
-      POSTGRES_DB: medizerodb
-      POSTGRES_USER: medizero
+      POSTGRES_DB: medicoredb
+      POSTGRES_USER: medicore
       POSTGRES_PASSWORD: ${DB_PASSWORD}
     ports:
       - "5432:5432"
@@ -17,7 +17,7 @@ services:
       - postgres_data:/var/lib/postgresql/data
       - ./postgres/initdb.d:/docker-entrypoint-initdb.d:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U medizero -d medizerodb"]
+      test: ["CMD-SHELL", "pg_isready -U medicore -d medicoredb"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -31,7 +31,7 @@ services:
   # ─────────────────────────────────────────
   redis:
     image: redis:7-alpine
-    container_name: medizero-redis
+    container_name: medicore-redis
     restart: unless-stopped
     command: redis-server --requirepass ${REDIS_PASSWORD}
     ports:
@@ -55,7 +55,7 @@ services:
     build:
       context: ./backend-main
       dockerfile: Dockerfile
-    container_name: medizero-backend
+    container_name: medicore-backend
     restart: unless-stopped
     depends_on:
       postgres:
@@ -66,8 +66,8 @@ services:
         condition: service_healthy
     environment:
       SPRING_PROFILES_ACTIVE: prod
-      DB_URL: jdbc:postgresql://postgres:5432/medizerodb
-      DB_USERNAME: medizero
+      DB_URL: jdbc:postgresql://postgres:5432/medicoredb
+      DB_USERNAME: medicore
       DB_PASSWORD: ${DB_PASSWORD}
       REDIS_HOST: redis
       REDIS_PORT: 6379
@@ -95,7 +95,7 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
-    container_name: medizero-frontend
+    container_name: medicore-frontend
     restart: unless-stopped
     depends_on:
       backend:
@@ -113,7 +113,7 @@ services:
   # ─────────────────────────────────────────
   ai-lb:
     image: nginx:alpine
-    container_name: medizero-ai-lb
+    container_name: medicore-ai-lb
     restart: unless-stopped
     depends_on:
       - ai-server
@@ -147,7 +147,7 @@ services:
       postgres:
         condition: service_healthy
     environment:
-      DB_URL: postgresql://medizero:${DB_PASSWORD}@postgres:5432/medizerodb
+      DB_URL: postgresql://medicore:${DB_PASSWORD}@postgres:5432/medicoredb
     # 포트는 ai-lb가 내부적으로 처리 (외부 노출 없음)
     expose:
       - "8000"
@@ -174,4 +174,4 @@ volumes:
 
 networks:
   default:
-    name: medizero-network
+    name: medicore-network

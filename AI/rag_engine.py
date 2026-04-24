@@ -22,7 +22,7 @@ from FlagEmbedding import FlagModel
 logger = logging.getLogger(__name__)
 
 # ── 환경변수 설정 ──────────────────────────────────────────────
-DB_URL          = os.getenv("DB_URL", "postgresql://medizero:pw@localhost:5432/medizerodb")
+DB_URL          = os.getenv("DB_URL", "postgresql://medicore:pw@localhost:5432/medicoredb")
 MODULE_NAME     = os.getenv("MODULE_NAME", "skin")
 GCP_PROJECT_ID  = os.getenv("GCP_PROJECT_ID")       # Google Cloud 프로젝트 ID
 GCP_LOCATION    = os.getenv("GCP_LOCATION", "asia-northeast3")  # 서울 리전
