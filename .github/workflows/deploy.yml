@@ -1,8 +1,9 @@
 name: Deploy (Self-hosted Runner)
 
 on:
-  push:
-    branches: [main]
+  workflow_dispatch:  # Self-hosted Runner 설치 전까지 수동 실행만 허용
+  # push:             # Self-hosted Runner 설치 완료 후 아래 주석 해제
+  #   branches: [main]
 
 jobs:
   # ─────────────────────────────────────────────────────────────

@@ -17,7 +17,7 @@ public class SecurityConfig {
 
     // application.properties의 CORS_ALLOWED_ORIGINS 환경변수에서 읽어옴
     // 예: "http://localhost:5173,https://your-domain.com"
-    @Value("${cors.allowed-origins:http://localhost:5173,http://localhost:3000}")
+    @Value("${spring.web.cors.allowed-origins:http://localhost:5173,http://localhost:3000}")
     private String allowedOriginsRaw;
 
     @Bean

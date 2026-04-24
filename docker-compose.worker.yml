@@ -34,8 +34,8 @@ services:
       - "8000:8000"
     volumes:
       - ai_models:/app/models
-      # GCP 서비스 계정 키 파일 마운트 (읽기 전용)
-      - ${GCP_KEY_PATH:-./secrets/gcp-key.json}:/secrets/gcp-key.json:ro
+      # GCP 서비스 계정 키 폴더 마운트 (secrets/gcp-key.json 파일 필요)
+      - ./secrets:/secrets:ro
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"]
       interval: 15s
@@ -45,9 +45,8 @@ services:
     deploy:
       resources:
         limits:
-          # BGE-M3(2.2GB) + FastAPI(1GB) + 여유 = 4GB
-          # Ollama 제거로 기존 11GB → 4GB 절약
-          memory: 4g
+          # BGE-M3(2.2GB) + FastAPI(1GB) + PyTorch/YOLO(2GB) + 여유 = 6GB
+          memory: 6g
 
 volumes:
   ai_models:

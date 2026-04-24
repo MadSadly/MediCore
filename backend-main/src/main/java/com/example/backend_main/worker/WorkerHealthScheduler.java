@@ -2,7 +2,7 @@ package com.example.backend_main.worker;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.scheduling.annotation.EnableScheduling;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
@@ -27,10 +27,19 @@ public class WorkerHealthScheduler {
 
     private final WorkerNodeRepository workerNodeRepository;
 
-    // RestClient: Spring Boot 3.2+ 제공. 타임아웃 3초로 빠른 실패 처리
+    private static final int TIMEOUT_MS = 3000;
+
     private final RestClient restClient = RestClient.builder()
+            .requestFactory(timeoutFactory())
             .defaultHeader("Content-Type", "application/json")
             .build();
+
+    private static SimpleClientHttpRequestFactory timeoutFactory() {
+        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
+        factory.setConnectTimeout(TIMEOUT_MS);
+        factory.setReadTimeout(TIMEOUT_MS);
+        return factory;
+    }
 
     // Circuit Breaker 설정값
     private static final int FAIL_THRESHOLD = 3;           // 몇 번 실패하면 OPEN으로 전환
