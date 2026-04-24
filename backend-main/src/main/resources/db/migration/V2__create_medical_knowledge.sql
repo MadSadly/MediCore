@@ -3,6 +3,8 @@
 -- BGE-M3 모델이 생성한 1024차원 벡터를 저장
 -- ================================================================
 
+CREATE EXTENSION IF NOT EXISTS vector;
+
 CREATE TABLE medical_knowledge (
     id          BIGSERIAL PRIMARY KEY,
     content     TEXT         NOT NULL,          -- 문서 본문
