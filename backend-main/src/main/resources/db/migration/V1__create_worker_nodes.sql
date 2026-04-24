@@ -20,8 +20,8 @@ CREATE TABLE worker_nodes (
 );
 
 INSERT INTO worker_nodes (name, display_name, url) VALUES
-    ('skin',   '피부 진단 서버',   'http://192.168.0.39:8000'),
-    ('brain',  '뇌종양 진단 서버', 'http://192.168.0.20:8000'),
+    ('skin',   '피부 진단 서버',   'http://192.168.0.20:8000'),
+    ('brain',  '뇌종양 진단 서버', 'http://192.168.0.9:8000'),
     ('eyes',   '안과 진단 서버',   'http://192.168.0.32:8000'),
     ('spine',  '척추 진단 서버',   'http://192.168.0.13:8000'),
     ('kidney', '신장 진단 서버',   'http://192.168.0.5:8000'),

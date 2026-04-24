@@ -3,9 +3,9 @@
 # 실행: docker compose -f docker-compose.master.yml up -d
 #
 # [IP 구성]
-# Master : 192.168.0.9   (이 파일 실행)
-# Worker1: 192.168.0.39  (피부)
-# Worker2: 192.168.0.20  (뇌종양)
+# Master : 192.168.0.39  (이 파일 실행)
+# Worker1: 192.168.0.20  (피부)
+# Worker2: 192.168.0.9   (뇌종양)
 # Worker3: 192.168.0.32  (안과)
 # Worker4: 192.168.0.13  (척추)
 # Worker5: 192.168.0.5   (신장)
@@ -102,8 +102,8 @@ services:
       REDIS_PASSWORD: ${REDIS_PASSWORD}
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS}
       # 워커 PC IP 목록 (헬스 스케줄러가 참조)
-      WORKER_SKIN_URL: http://${WORKER1_IP:-192.168.0.39}:8000
-      WORKER_BRAIN_URL: http://${WORKER2_IP:-192.168.0.20}:8000
+      WORKER_SKIN_URL: http://${WORKER1_IP:-192.168.0.20}:8000
+      WORKER_BRAIN_URL: http://${WORKER2_IP:-192.168.0.9}:8000
       WORKER_EYES_URL: http://${WORKER3_IP:-192.168.0.32}:8000
       WORKER_SPINE_URL: http://${WORKER4_IP:-192.168.0.13}:8000
       WORKER_KIDNEY_URL: http://${WORKER5_IP:-192.168.0.5}:8000

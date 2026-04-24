@@ -20,7 +20,7 @@ services:
       MODULE_NAME: ${MODULE_NAME:-skin}
 
       # Master PC PostgreSQL 접속 (RAG 벡터 검색)
-      DB_URL: postgresql://medicore:${DB_PASSWORD}@${MASTER_IP:-192.168.0.9}:5432/medicoredb
+      DB_URL: postgresql://medicore:${DB_PASSWORD}@${MASTER_IP:-192.168.0.39}:5432/medicoredb
 
       # Google Vertex AI 설정
       GCP_PROJECT_ID: ${GCP_PROJECT_ID}

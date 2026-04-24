@@ -31,7 +31,7 @@
                      Cloudflare Tunnel
                             │
 ┌───────────────────────────▼─────────────────────────────────────┐
-│                      Master PC (192.168.0.9)                     │
+│                     Master PC (192.168.0.39)                     │
 │                                                                  │
 │  ┌─────────────┐  ┌──────────────┐  ┌────────────┐  ┌────────┐ │
 │  │    React    │  │ Spring Boot  │  │ PostgreSQL  │  │ Redis  │ │
@@ -46,7 +46,7 @@
 ┌─────────▼──────┐ ┌───────▼──────┐ ┌──────▼───────┐
 │  Worker 1      │ │  Worker 2    │ │  Worker 3    │
 │  피부 진단     │ │  뇌종양 진단  │ │  안과 진단   │
-│  :192.168.0.39 │ │:192.168.0.20 │ │:192.168.0.32 │
+│  :192.168.0.20 │ │:192.168.0.9  │ │:192.168.0.32 │
 │  FastAPI :8000 │ │FastAPI :8000 │ │FastAPI :8000 │
 │  BGE-M3+Gemini │ │BGE-M3+Gemini │ │BGE-M3+Gemini │
 └────────────────┘ └──────────────┘ └──────────────┘
@@ -379,7 +379,7 @@ cp .env_example .env
 `.env` 수정:
 ```env
 DB_PASSWORD=팀장에게받은값       # Master PC PostgreSQL 비밀번호
-MASTER_IP=192.168.0.9            # Master PC IP (변경 금지)
+MASTER_IP=192.168.0.39           # Master PC IP (변경 금지)
 MODULE_NAME=skin                 # 본인 담당 질환으로 변경
 ```
 
@@ -414,8 +414,8 @@ curl http://localhost:8000/health
 
 | PC | 담당자 | MODULE_NAME | IP |
 |---|---|---|---|
-| Worker 1 | - | `skin` | 192.168.0.39 |
-| Worker 2 | - | `brain` | 192.168.0.20 |
+| Worker 1 | - | `skin` | 192.168.0.20 |
+| Worker 2 | - | `brain` | 192.168.0.9 |
 | Worker 3 | - | `eyes` | 192.168.0.32 |
 | Worker 4 | - | `spine` | 192.168.0.13 |
 | Worker 5 | - | `kidney` | 192.168.0.5 |
@@ -450,7 +450,7 @@ curl http://localhost:8000/health
   {
     "name": "skin",
     "displayName": "피부 진단 서버",
-    "url": "http://192.168.0.39:8000",
+    "url": "http://192.168.0.20:8000",
     "status": "HEALTHY",
     "circuitState": "CLOSED",
     "failCount": 0,
