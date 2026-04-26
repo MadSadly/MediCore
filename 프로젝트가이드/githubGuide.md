@@ -24,8 +24,7 @@ develop   ── 통합 테스트용. 여기서 합침
 ## 처음 한 번만 (프로젝트 받고 브랜치 만들기)
 
 ```cmd
-git clone https://github.com/팀레포주소.git
-cd MediCore
+git clone https://github.com/MadSadly/MediCore.git
 
 git checkout develop
 git checkout -b feature/본인모듈명
