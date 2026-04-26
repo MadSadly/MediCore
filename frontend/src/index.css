@@ -1,1 +1,56 @@
 @import "tailwindcss";
+
+@theme {
+  --color-surface: #10131a;
+  --color-surface-dim: #10131a;
+  --color-surface-lowest: #0b0e14;
+  --color-surface-container: #1d2026;
+  --color-surface-container-low: #191c22;
+  --color-surface-container-high: #272a31;
+  --color-surface-container-highest: #32353c;
+  --color-surface-bright: #363940;
+  --color-on-surface: #e1e2eb;
+  --color-on-surface-variant: #c3c6d7;
+  --color-primary: #b4c5ff;
+  --color-primary-container: #2563eb;
+  --color-on-primary: #002a78;
+  --color-on-primary-container: #eeefff;
+  --color-secondary: #bec6e0;
+  --color-secondary-container: #3f465c;
+  --color-outline: #8d90a0;
+  --color-outline-variant: #434655;
+  --color-error: #ffb4ab;
+  --color-tertiary: #7bd0ff;
+}
+
+body {
+  font-family: 'Inter', sans-serif;
+  background-color: #0b0e14;
+  color: #e1e2eb;
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 5px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #2d3748;
+  border-radius: 10px;
+}
+
+.sidebar-transition {
+  transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.glass-card {
+  background: #0f172a;
+  border: 1px solid #1e293b;
+}
+
+.ai-glow {
+  box-shadow: 0 0 20px 0 rgba(37, 99, 235, 0.15);
+  border: 1px solid rgba(37, 99, 235, 0.2);
+}
+
+.glow-blue {
+  box-shadow: 0 0 15px rgba(37, 99, 235, 0.3);
+}
