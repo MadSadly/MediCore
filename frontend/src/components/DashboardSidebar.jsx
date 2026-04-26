@@ -1,26 +1,14 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom'
-import {
-  Brain, Columns2, Circle, Shield, Eye, LayoutDashboard,
-  Settings, LogOut, ChevronLeft, ChevronRight, Activity,
-} from 'lucide-react'
+import { LayoutDashboard, Settings, LogOut, ChevronLeft, ChevronRight } from 'lucide-react'
 import MediLogo from './MediLogo'
 
 const NAV_ITEMS = [
-  { path: '/dashboard',      label: '통합 대시보드',  sub: '김용',  icon: LayoutDashboard },
-  { path: '/brain-tumor',    label: '뇌종양 진단',    sub: '변운조', icon: Brain           },
-  { path: '/spine-disk',     label: '허리디스크',     sub: '김담현', icon: Columns2        },
-  { path: '/colon-cancer',   label: '대장암 예측',    sub: '박기완', icon: Circle          },
-  { path: '/kidney-failure', label: '신부전 관리',    sub: '김남준', icon: Shield          },
-  { path: '/skin-disease',   label: '피부질환 분류',  sub: '김민수', icon: Activity        },
-  { path: '/eye-disease',    label: '안과 질환',      sub: '홍승현', icon: Eye             },
+  { path: '/dashboard', label: '통합 대시보드', icon: LayoutDashboard },
 ]
 
-export default function Sidebar({ open, onToggle }) {
+export default function DashboardSidebar({ open, onToggle }) {
   const location = useLocation()
   const navigate = useNavigate()
-
-  const patientMatch = location.pathname.match(/^\/patients\/([^/]+)/)
-  const currentPatientId = patientMatch ? patientMatch[1] : null
 
   const logout = () => {
     localStorage.removeItem('token')
@@ -45,14 +33,6 @@ export default function Sidebar({ open, onToggle }) {
         )}
       </div>
 
-      {/* 환자 컨텍스트 배너 */}
-      {open && currentPatientId && (
-        <div className="mx-3 mt-3 px-3 py-2 bg-blue-600/10 border border-blue-600/20 rounded-lg">
-          <p className="text-[10px] text-blue-400 font-bold uppercase tracking-widest">현재 환자</p>
-          <p className="text-xs text-slate-300 font-semibold truncate">{currentPatientId}</p>
-        </div>
-      )}
-
       {/* Nav */}
       <nav className="flex-1 py-4 px-3 space-y-1 overflow-y-auto custom-scrollbar">
         {NAV_ITEMS.map((item) => {
@@ -73,12 +53,22 @@ export default function Sidebar({ open, onToggle }) {
               {open && (
                 <div className="ml-4 min-w-0">
                   <p className="text-sm font-semibold whitespace-nowrap">{item.label}</p>
-                  <p className="text-[10px] text-slate-500 whitespace-nowrap">{item.sub}</p>
                 </div>
               )}
             </Link>
           )
         })}
+
+        {/* 구분선 + 안내 */}
+        {open && (
+          <div className="pt-4 px-1">
+            <p className="text-[10px] text-slate-600 uppercase font-bold tracking-widest mb-3">질환별 분석</p>
+            <div className="p-3 rounded-lg border border-dashed border-slate-800 text-center">
+              <p className="text-xs text-slate-600">환자를 선택하면</p>
+              <p className="text-xs text-slate-600">질환 분석 메뉴가 열립니다</p>
+            </div>
+          </div>
+        )}
       </nav>
 
       {/* Bottom */}
