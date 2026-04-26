@@ -23,9 +23,12 @@ docker compose version
 cd C:\Users\본인이름\Desktop
 git clone https://github.com/팀레포주소.git
 cd MediCore
+
+자세한 내용은 githubGuide.md 에서 확인
 ```
 
 ---
+이미 깔려있을수 있으니 cmd에서 먼저 체크부터하고 진행합시다..
 
 ## 2. 프론트엔드 (React)
 
@@ -65,27 +68,76 @@ gradlew.bat build -x test
 
 ## 4. AI 서버 (FastAPI)
 
-**설치할 것:** Python 3.11
-- https://www.python.org/downloads 에서 3.11 다운로드
+**설치할 것:** Python 3.10
+- https://www.python.org/downloads 에서 3.10 다운로드
 - 설치 중 **"Add Python to PATH"** 체크 필수
 
-설치 확인 및 패키지 설치:
+설치 확인 및 가상환경 생성 후 패키지 설치:
 ```cmd
 python --version
 
 cd C:\Users\본인이름\Desktop\MediCore\AI
+python -m venv venv
+venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
+`(venv)` 가 앞에 붙으면 가상환경 진입 완료. 이후 작업은 항상 venv 안에서 진행.
+
 ---
 
-## 5. DB (PostgreSQL)
+## 5. 환경변수 설정 (.env)
+
+Docker 실행 전 필수. 루트 폴더에 `.env` 파일을 만들어야 함.
+
+```cmd
+cd C:\Users\본인이름\Desktop\MediCore
+copy .env_example .env
+```
+
+`.env` 파일을 메모장으로 열어서 비밀번호 직접 설정:
+
+```
+DB_PASSWORD=원하는비밀번호
+REDIS_PASSWORD=원하는비밀번호
+```
+
+> `.env` 파일은 git에 올라가지 않음. 본인 PC에만 존재.
+
+---
+
+## 6. DB (PostgreSQL)
 
 별도 설치 없음. Docker가 자동으로 실행해줌.
 
 ---
 
-## 6. 실행 방법
+## 7. 실행 방법
+
+### 한 번에 전부 실행 (개발할 때)
+
+세팅이 전부 완료됐으면 프로젝트 루트의 `run_all.bat` 을 실행
+cmd 창에서 run_all.bat 실행
+예) 
+
+- PostgreSQL + Redis → Docker로 자동 실행
+- Spring Boot, FastAPI, React → 각각 새 터미널 창에서 자동 실행
+
+| 서비스 | 주소 |
+|--------|------|
+| 프론트엔드 | http://localhost:5173 |
+| 백엔드 | http://localhost:8080 |
+| AI 서버 | http://localhost:8000 |
+
+종료할 때:
+```cmd
+docker compose stop
+```
+각 터미널 창도 닫으면 됨.
+
+---
+
+### 수동으로 실행할 때 (마지막에 배포전까지는 ### 개발할때 를 참조하세요)
 
 ### 한 번에 전부 실행 (처음 세팅 확인할 때)
 
@@ -129,6 +181,7 @@ npm run dev
 **창 4 - AI 서버**
 ```cmd
 cd C:\Users\본인이름\Desktop\MediCore\AI
+venv\Scripts\activate
 uvicorn main:app --reload --port 8000
 ```
 
@@ -144,7 +197,7 @@ uvicorn main:app --reload --port 8000
 |------|------|----------------|
 | 프론트 | Node.js 20 | `MediCore/frontend/` |
 | 백엔드 | JDK 17 | `MediCore/backend-main/` |
-| AI | Python 3.11 | `MediCore/AI/` |
+| AI | Python 3.10 | `MediCore/AI/` |
 | DB | 없음 (Docker) | - |
 | 전체 실행 | Docker Desktop | `MediCore/` (루트) |
 
