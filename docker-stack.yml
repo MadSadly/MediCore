@@ -1,0 +1,207 @@
+# ================================================================
+# MEDI-Zero Docker Swarm Stack
+# 조장 마스터 PC에서 실행:
+#   docker stack deploy -c docker-stack.yml medicore
+# ================================================================
+
+version: '3.8'
+
+services:
+
+  # ── PostgreSQL ────────────────────────────────────────────────
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_DB: medicoredb
+      POSTGRES_USER: medicore
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./postgres/initdb.d:/docker-entrypoint-initdb.d:ro
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager   # 마스터 PC에서만 실행
+    networks:
+      - medicore-overlay
+
+  # ── Redis ─────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    command: redis-server --requirepass ${REDIS_PASSWORD}
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+    networks:
+      - medicore-overlay
+
+  # ── Spring Boot ───────────────────────────────────────────────
+  backend:
+    image: ghcr.io/madsadly/medicore-backend:latest
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      DB_URL: jdbc:postgresql://postgres:5432/medicoredb
+      DB_USERNAME: medicore
+      DB_PASSWORD: ${DB_PASSWORD}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS}
+      WORKER_SKIN_URL: http://ai-skin:8000
+      WORKER_BRAIN_URL: http://ai-brain:8000
+      WORKER_EYES_URL: http://ai-eyes:8000
+      WORKER_SPINE_URL: http://ai-spine:8000
+      WORKER_KIDNEY_URL: http://ai-kidney:8000
+      WORKER_COLON_URL: http://ai-colon:8000
+    ports:
+      - "8080:8080"
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+    networks:
+      - medicore-overlay
+
+  # ── React Frontend ────────────────────────────────────────────
+  frontend:
+    image: ghcr.io/madsadly/medicore-frontend:latest
+    ports:
+      - "3000:80"
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - node.role == manager
+    networks:
+      - medicore-overlay
+
+  # ── AI 워커: 피부 ─────────────────────────────────────────────
+  ai-skin:
+    image: ghcr.io/madsadly/medicore-ai:latest
+    environment:
+      MODULE_NAME: skin
+      DB_URL: postgresql://medicore:${DB_PASSWORD}@postgres:5432/medicoredb
+      GCP_PROJECT_ID: ${GCP_PROJECT_ID}
+      GCP_LOCATION: ${GCP_LOCATION:-asia-northeast3}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-1.5-flash-001}
+      GOOGLE_APPLICATION_CREDENTIALS: /secrets/gcp-key.json
+    volumes:
+      - ./secrets:/secrets:ro
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - node.labels.module == skin   # 피부 담당 PC에만 배포
+    networks:
+      - medicore-overlay
+
+  # ── AI 워커: 뇌종양 ───────────────────────────────────────────
+  ai-brain:
+    image: ghcr.io/madsadly/medicore-ai:latest
+    environment:
+      MODULE_NAME: brain
+      DB_URL: postgresql://medicore:${DB_PASSWORD}@postgres:5432/medicoredb
+      GCP_PROJECT_ID: ${GCP_PROJECT_ID}
+      GCP_LOCATION: ${GCP_LOCATION:-asia-northeast3}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-1.5-flash-001}
+      GOOGLE_APPLICATION_CREDENTIALS: /secrets/gcp-key.json
+    volumes:
+      - ./secrets:/secrets:ro
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - node.labels.module == brain
+    networks:
+      - medicore-overlay
+
+  # ── AI 워커: 안과 ─────────────────────────────────────────────
+  ai-eyes:
+    image: ghcr.io/madsadly/medicore-ai:latest
+    environment:
+      MODULE_NAME: eyes
+      DB_URL: postgresql://medicore:${DB_PASSWORD}@postgres:5432/medicoredb
+      GCP_PROJECT_ID: ${GCP_PROJECT_ID}
+      GCP_LOCATION: ${GCP_LOCATION:-asia-northeast3}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-1.5-flash-001}
+      GOOGLE_APPLICATION_CREDENTIALS: /secrets/gcp-key.json
+    volumes:
+      - ./secrets:/secrets:ro
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - node.labels.module == eyes
+    networks:
+      - medicore-overlay
+
+  # ── AI 워커: 척추 ─────────────────────────────────────────────
+  ai-spine:
+    image: ghcr.io/madsadly/medicore-ai:latest
+    environment:
+      MODULE_NAME: spine
+      DB_URL: postgresql://medicore:${DB_PASSWORD}@postgres:5432/medicoredb
+      GCP_PROJECT_ID: ${GCP_PROJECT_ID}
+      GCP_LOCATION: ${GCP_LOCATION:-asia-northeast3}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-1.5-flash-001}
+      GOOGLE_APPLICATION_CREDENTIALS: /secrets/gcp-key.json
+    volumes:
+      - ./secrets:/secrets:ro
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - node.labels.module == spine
+    networks:
+      - medicore-overlay
+
+  # ── AI 워커: 신장 ─────────────────────────────────────────────
+  ai-kidney:
+    image: ghcr.io/madsadly/medicore-ai:latest
+    environment:
+      MODULE_NAME: kidney
+      DB_URL: postgresql://medicore:${DB_PASSWORD}@postgres:5432/medicoredb
+      GCP_PROJECT_ID: ${GCP_PROJECT_ID}
+      GCP_LOCATION: ${GCP_LOCATION:-asia-northeast3}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-1.5-flash-001}
+      GOOGLE_APPLICATION_CREDENTIALS: /secrets/gcp-key.json
+    volumes:
+      - ./secrets:/secrets:ro
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - node.labels.module == kidney
+    networks:
+      - medicore-overlay
+
+  # ── AI 워커: 대장암 ───────────────────────────────────────────
+  ai-colon:
+    image: ghcr.io/madsadly/medicore-ai:latest
+    environment:
+      MODULE_NAME: colon
+      DB_URL: postgresql://medicore:${DB_PASSWORD}@postgres:5432/medicoredb
+      GCP_PROJECT_ID: ${GCP_PROJECT_ID}
+      GCP_LOCATION: ${GCP_LOCATION:-asia-northeast3}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-1.5-flash-001}
+      GOOGLE_APPLICATION_CREDENTIALS: /secrets/gcp-key.json
+    volumes:
+      - ./secrets:/secrets:ro
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - node.labels.module == colon
+    networks:
+      - medicore-overlay
+
+volumes:
+  postgres_data:
+
+networks:
+  medicore-overlay:
+    driver: overlay

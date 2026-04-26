@@ -8,10 +8,11 @@ on:
 
 jobs:
   # ─────────────────────────────────────────
-  # Spring Boot 빌드 & 테스트
+  # Spring Boot 단위 테스트 (H2 인메모리)
+  # 빠른 피드백 - 외부 의존성 없음
   # ─────────────────────────────────────────
-  backend:
-    name: Backend (Spring Boot)
+  backend-unit:
+    name: Backend Unit Test (H2)
     runs-on: ubuntu-latest
 
     steps:
@@ -28,9 +29,9 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x backend-main/gradlew
 
-      - name: Build & Test (test 프로필 = H2 인메모리)
+      - name: Run unit tests
         working-directory: backend-main
-        run: ./gradlew test --info
+        run: ./gradlew test --no-daemon
         env:
           SPRING_PROFILES_ACTIVE: test
 
@@ -38,7 +39,72 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: backend-test-results
+          name: unit-test-results
+          path: backend-main/build/reports/tests/
+
+  # ─────────────────────────────────────────
+  # Spring Boot 통합 테스트 (실제 PostgreSQL)
+  # DB 연결, Flyway 마이그레이션, JPA 동작 검증
+  # ─────────────────────────────────────────
+  backend-integration:
+    name: Backend Integration Test (PostgreSQL)
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_DB: medicoredb
+          POSTGRES_USER: medicore
+          POSTGRES_PASSWORD: ci_test_password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U medicore -d medicoredb"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: 'gradle'
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x backend-main/gradlew
+
+      - name: Run integration tests (real PostgreSQL)
+        working-directory: backend-main
+        run: ./gradlew test --no-daemon
+        env:
+          SPRING_PROFILES_ACTIVE: local
+          SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/medicoredb
+          SPRING_DATASOURCE_USERNAME: medicore
+          SPRING_DATASOURCE_PASSWORD: ci_test_password
+          SPRING_DATA_REDIS_HOST: localhost
+          SPRING_DATA_REDIS_PORT: 6379
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-test-results
           path: backend-main/build/reports/tests/
 
   # ─────────────────────────────────────────
@@ -72,13 +138,18 @@ jobs:
         run: npm run build
 
   # ─────────────────────────────────────────
-  # Docker 이미지 빌드 확인 (main 브랜치 push 시만)
+  # GitHub Container Registry 이미지 빌드 & 푸시 (main push 시만)
+  # 별도 계정 불필요 - GitHub 토큰 자동 사용
+  # 이미지 주소: ghcr.io/MadSadly/medicore-xxx:latest
   # ─────────────────────────────────────────
-  docker-build:
-    name: Docker Build Check
+  docker-push:
+    name: GitHub Container Registry Push
     runs-on: ubuntu-latest
-    needs: [backend, frontend]
+    needs: [backend-unit, backend-integration, frontend]
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    permissions:
+      contents: read
+      packages: write
 
     steps:
       - name: Checkout
@@ -87,18 +158,36 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Build backend image (캐시만, push 안 함)
+      - name: GitHub Container Registry 로그인
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Backend 이미지 빌드 & 푸시
         uses: docker/build-push-action@v5
         with:
           context: ./backend-main
-          push: false
+          push: true
+          tags: ghcr.io/madsadly/medicore-backend:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Build frontend image (캐시만, push 안 함)
+      - name: Frontend 이미지 빌드 & 푸시
         uses: docker/build-push-action@v5
         with:
           context: ./frontend
-          push: false
+          push: true
+          tags: ghcr.io/madsadly/medicore-frontend:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: AI 서버 이미지 빌드 & 푸시
+        uses: docker/build-push-action@v5
+        with:
+          context: ./AI
+          push: true
+          tags: ghcr.io/madsadly/medicore-ai:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
