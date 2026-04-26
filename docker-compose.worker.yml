@@ -1,0 +1,56 @@
+# ================================================================
+# MEDI-Zero Worker PC docker-compose (Vertex AI Gemini 버전)
+# Ollama 제거 → 워커 PC RAM 사용량 ~11GB → ~4GB 로 감소
+#
+# 실행: docker compose -f docker-compose.worker.yml up -d
+#
+# [워커별 MODULE_NAME]
+# skin | brain | eyes | spine | kidney | colon
+# ================================================================
+
+services:
+
+  ai-server:
+    build:
+      context: ./AI
+      dockerfile: Dockerfile
+    container_name: medicore-ai-${MODULE_NAME:-skin}
+    restart: unless-stopped
+    environment:
+      MODULE_NAME: ${MODULE_NAME:-skin}
+
+      # Master PC PostgreSQL 접속 (RAG 벡터 검색)
+      DB_URL: postgresql://medicore:${DB_PASSWORD}@${MASTER_IP:-192.168.0.39}:5432/medicoredb
+
+      # Google Vertex AI 설정
+      GCP_PROJECT_ID: ${GCP_PROJECT_ID}
+      GCP_LOCATION: ${GCP_LOCATION:-asia-northeast3}   # 서울 리전
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.5-flash-001}
+
+      # 서비스 계정 키 파일 경로 (컨테이너 내부 경로)
+      GOOGLE_APPLICATION_CREDENTIALS: /secrets/gcp-key.json
+
+    ports:
+      - "8000:8000"
+    volumes:
+      - ai_models:/app/models
+      # GCP 서비스 계정 키 폴더 마운트 (secrets/gcp-key.json 파일 필요)
+      - ./secrets:/secrets:ro
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          # BGE-M3(2.2GB) + FastAPI(1GB) + PyTorch/YOLO(2GB) + 여유 = 6GB
+          memory: 6g
+
+volumes:
+  ai_models:
+
+networks:
+  default:
+    name: medicore-worker-network
