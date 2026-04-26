@@ -1,5 +1,6 @@
 # 개발 환경 세팅 가이드 (CMD 기준)
-
+## 지금 이안에 있는 예시로 되어있는 path는 전부 제 pc에 맞춰있으니 본인 path로 변경해서
+해야합니당
 ---
 
 ## 0. 공통 설치 (제일 먼저)
@@ -95,14 +96,36 @@ cd C:\Users\본인이름\Desktop\MediCore
 copy .env_example .env
 ```
 
-`.env` 파일을 메모장으로 열어서 비밀번호 직접 설정:
+`.env` 파일을 메모장으로 열어서 아래 항목 설정:
 
 ```
 DB_PASSWORD=원하는비밀번호
 REDIS_PASSWORD=원하는비밀번호
+GCP_PROJECT_ID=본인GCP프로젝트ID
+GCP_KEY_PATH=C:/Users/본인이름/Desktop/MediCore/secrets/gcp-key.json 
 ```
 
 > `.env` 파일은 git에 올라가지 않음. 본인 PC에만 존재.
+
+---
+
+## 5-1. GCP 계정 설정 (AI 서버용, Vertex AI 사용할 경우)
+
+자세한 내용은 `vertexAIGuide.md` 참고.
+
+요약:
+1. https://cloud.google.com → 무료 계정 생성 ($300 크레딧)
+2. GCP 콘솔 → 새 프로젝트 생성 → **프로젝트 ID** 복사
+3. Vertex AI API 활성화
+4. 서비스 계정 생성 → 역할: `Vertex AI 사용자` → JSON 키 다운로드
+5. JSON 파일을 `MediCore/secrets/gcp-key.json` 으로 저장
+
+```cmd
+mkdir C:\Users\본인이름\Desktop\MediCore\secrets
+```
+
+> `secrets/` 폴더는 gitignore에 등록되어 있어 git에 올라가지 않음.
+> Vertex AI 외 다른 LLM(OpenAI 등)을 쓸 경우 해당 API 키를 .env에 직접 추가하세요.
 
 ---
 

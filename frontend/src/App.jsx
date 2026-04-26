@@ -2,9 +2,16 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import LoginPage from './pages/LoginPage'
 import MainPage from './pages/MainPage'
 import PatientDetailPage from './pages/PatientDetailPage'
-import DiagnosisPage from './pages/DiagnosisPage'
 import MainLayout from './components/MainLayout'
 import PatientLayout from './components/PatientLayout'
+
+// 팀원별 진단 페이지 (각자 본인 폴더 파일만 수정하세요)
+import BrainTumorPage    from './WJ/BrainTumorPage'     // WJ - 뇌종양
+import SpineDiskPage     from './DH/SpineDiskPage'       // DH - 허리디스크
+import ColonCancerPage   from './GW/ColonCancerPage'     // GW - 대장암
+import KidneyFailurePage from './NJ/KidneyFailurePage'   // NJ - 신부전
+import SkinDiseasePage   from './MS/SkinDiseasePage'     // MS - 피부질환
+import EyeDiseasePage    from './SH/EyeDiseasePage'      // SH - 안과
 
 function PrivateRoute({ children }) {
   const token = localStorage.getItem('token')
@@ -39,12 +46,12 @@ export default function App() {
           }
         >
           <Route index element={<PatientDetailPage />} />
-          <Route path="brain-tumor"    element={<DiagnosisPage diseaseType="brain-tumor"    label="뇌종양 진단"   assignee="변운조" />} />
-          <Route path="spine-disk"     element={<DiagnosisPage diseaseType="spine-disk"     label="허리디스크"    assignee="김담현" />} />
-          <Route path="colon-cancer"   element={<DiagnosisPage diseaseType="colon-cancer"   label="대장암 예측"   assignee="박기완" />} />
-          <Route path="kidney-failure" element={<DiagnosisPage diseaseType="kidney-failure" label="신부전 관리"   assignee="김남준" />} />
-          <Route path="skin-disease"   element={<DiagnosisPage diseaseType="skin-disease"   label="피부질환 분류" assignee="김민수" />} />
-          <Route path="eye-disease"    element={<DiagnosisPage diseaseType="eye-disease"    label="안과 질환"     assignee="홍승현" />} />
+          <Route path="brain-tumor"    element={<BrainTumorPage />} />
+          <Route path="spine-disk"     element={<SpineDiskPage />} />
+          <Route path="colon-cancer"   element={<ColonCancerPage />} />
+          <Route path="kidney-failure" element={<KidneyFailurePage />} />
+          <Route path="skin-disease"   element={<SkinDiseasePage />} />
+          <Route path="eye-disease"    element={<EyeDiseasePage />} />
         </Route>
 
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
