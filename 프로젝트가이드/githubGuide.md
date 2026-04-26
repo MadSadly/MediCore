@@ -15,7 +15,14 @@ main      ── 최종 완성본. 직접 push 금지
   └── feature/colon        ← 대장암 담당
 ```
 
-**규칙:** 각자 본인 `feature/모듈명` 브랜치에서만 작업. `main`에 직접 push 금지.  
+**규칙:** 각자 본인 `feature/모듈명` 브랜치에서만 작업. `main`에 직접 push 금지. 
+-> 일단 접속을한다음에 git branch 명령어를 cmd에 입력하면 
+D:\workspace\MediCore>git branch
+* feature/brain
+  main
+
+이런식으로 출력이 되는데 * 옆에있는게 현재 자기가 사용중인 브랜치
+
 **PR:** `feature/모듈명` → `main` 으로 Pull Request 생성.  
 **CI:** PR 생성 또는 main push 시 자동으로 테스트 실행.
 
