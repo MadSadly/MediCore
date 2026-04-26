@@ -2,8 +2,8 @@ import { Link, useLocation, useNavigate } from 'react-router-dom'
 import {
   Brain, Columns2, Circle, Shield, Eye, LayoutDashboard,
   Settings, LogOut, ChevronLeft, ChevronRight, Activity,
-  Stethoscope
 } from 'lucide-react'
+import MediLogo from './MediLogo'
 
 const NAV_ITEMS = [
   { path: '/dashboard',      label: '통합 대시보드',  sub: '김용',  icon: LayoutDashboard, diseaseKey: null },
@@ -58,8 +58,8 @@ export default function Sidebar({ open, onToggle }) {
     >
       {/* Logo */}
       <div className="h-20 flex-shrink-0 flex items-center px-5 border-b border-slate-800 overflow-hidden">
-        <div className="bg-blue-600 p-2 rounded-lg flex-shrink-0 glow-blue">
-          <Stethoscope size={20} className="text-white" />
+        <div className="flex-shrink-0">
+          <MediLogo size={open ? 40 : 36} />
         </div>
         {open && (
           <div className="ml-3">
