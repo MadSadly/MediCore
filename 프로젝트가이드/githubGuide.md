@@ -7,17 +7,17 @@
 ```
 main      ── 최종 완성본. 직접 push 금지
   │
-develop   ── 통합 테스트용. 여기서 합침
-  │
-  ├── feature/brain   ← 뇌종양 담당
-  ├── feature/skin    ← 피부 담당
-  ├── feature/eyes    ← 안과 담당
-  ├── feature/spine   ← 척추 담당
-  ├── feature/kidney  ← 신장 담당
-  └── feature/colon   ← 대장암 담당
+  ├── feature/brain        ← 뇌종양 담당
+  ├── feature/skin         ← 피부 담당
+  ├── feature/eyes         ← 안과 담당
+  ├── feature/lumbarSpine  ← 척추 담당
+  ├── feature/kidney       ← 신장 담당
+  └── feature/colon        ← 대장암 담당
 ```
 
-**규칙:** 각자 본인 `feature/모듈명` 브랜치에서만 작업. `main`, `develop`에 직접 push 금지.
+**규칙:** 각자 본인 `feature/모듈명` 브랜치에서만 작업. `main`에 직접 push 금지.  
+**PR:** `feature/모듈명` → `main` 으로 Pull Request 생성.  
+**CI:** PR 생성 또는 main push 시 자동으로 테스트 실행.
 
 ---
 
@@ -26,8 +26,8 @@ develop   ── 통합 테스트용. 여기서 합침
 ```cmd
 git clone https://github.com/MadSadly/MediCore.git
 
-git checkout develop
 git checkout -b feature/본인모듈명
+git push -u origin feature/본인모듈명
 ```
 
 ---
@@ -35,10 +35,10 @@ git checkout -b feature/본인모듈명
 ## 매일 작업 시작할 때
 
 ```cmd
-git checkout develop
-git pull origin develop
+git checkout main
+git pull origin main
 git checkout feature/본인모듈명
-git merge develop
+git merge main
 ```
 
 > 다른 팀원이 올린 최신 코드를 내 브랜치에 반영하는 과정.
@@ -62,10 +62,10 @@ git push origin feature/brain
 
 ---
 
-## 작업 완료 후 develop에 합치기 (PR)
+## 작업 완료 후 main에 합치기 (PR)
 
 1. GitHub 웹사이트 접속
-2. `feature/본인모듈` → `develop` 으로 **Pull Request** 생성
+2. `feature/본인모듈` → `main` 으로 **Pull Request** 생성
 3. 팀원 리뷰 후 Merge
 
 ---
@@ -96,7 +96,7 @@ git push origin feature/brain
     내가 수정한 코드
 =======
     조원이 수정한 코드
->>>>>>> develop
+>>>>>>> main
 ```
 
 파일 열어서 둘 중 하나 선택하거나 합친 뒤:
@@ -113,8 +113,8 @@ git commit -m "충돌 해결"
 
 ```
 작업 시작
-  → git pull로 최신화
+  → git pull로 최신화 (main 기준)
   → 코드 작업
   → git add → git commit → git push
-  → 완료되면 GitHub에서 PR 생성
+  → 완료되면 GitHub에서 PR 생성 (feature → main)
 ```
