@@ -1,254 +1,201 @@
-import { useParams, useSearchParams, useNavigate } from 'react-router-dom'
-import { AlertCircle, AlertTriangle, CheckCircle, TrendingUp, FileText, Pill, Users, Activity, ArrowLeft } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { useParams } from 'react-router-dom'
+import axios from 'axios'
+import { FileText, Activity, Brain, Columns2, Circle, Shield, Eye } from 'lucide-react'
 
-const DISEASE_TABS = [
-  { key: 'overview',       label: '전체 개요',    color: 'blue' },
-  { key: 'brain-tumor',    label: '뇌종양 진단',  color: 'blue' },
-  { key: 'spine-disk',     label: '허리디스크',   color: 'violet' },
-  { key: 'colon-cancer',   label: '대장암 예측',  color: 'amber' },
-  { key: 'kidney-failure', label: '신부전 관리',  color: 'cyan' },
-  { key: 'skin-disease',   label: '피부질환',     color: 'rose' },
-  { key: 'eye-disease',    label: '안과 질환',    color: 'teal' },
-]
-
-const TIMELINE = [
-  { date: '2023년 10월 24일', title: '조영 증강 MRI (두개골)', desc: '측두엽 내 비정상적 성장 관찰. 생검 권장.', tag: '영상의학과', active: true },
-  { date: '2022년 8월 12일',  title: '정기 건강 검진',        desc: '기초 활력 징후 기록. 특이 사항 없음.',   tag: '일반',      active: false },
-  { date: '2021년 1월 5일',   title: '응급실 입원: 외상',     desc: '낙상 후 척추 스크리닝. 결과: 골절 없음.', tag: '응급',      active: false },
-]
-
-const AI_INSIGHTS = [
-  { icon: AlertCircle,  color: 'text-red-400',     title: '부피 증가',     desc: '병변 부피가 이전 스캔 대비 2.4cm³ 증가했습니다.' },
-  { icon: AlertTriangle,color: 'text-amber-400',   title: '정중선 이동',   desc: '좌측 반구에서 미세한 1.2mm 이동이 감지되었습니다.' },
-  { icon: CheckCircle,  color: 'text-emerald-400', title: '혈관 침범 없음', desc: '주요 동맥은 보조 영역으로부터 안전합니다.' },
-]
-
-const TAB_COLORS = {
-  blue:   'border-blue-500 text-blue-400 bg-blue-600/5',
-  violet: 'border-violet-500 text-violet-400 bg-violet-600/5',
-  amber:  'border-amber-500 text-amber-400 bg-amber-600/5',
-  cyan:   'border-cyan-500 text-cyan-400 bg-cyan-600/5',
-  rose:   'border-rose-500 text-rose-400 bg-rose-600/5',
-  teal:   'border-teal-500 text-teal-400 bg-teal-600/5',
+const DISEASE_LABELS = {
+  'brain-tumor':    { label: '뇌종양 진단',   icon: Brain,    color: 'text-blue-400',   bg: 'bg-blue-600/10',   border: 'border-blue-600/20'   },
+  'spine-disk':     { label: '허리디스크',    icon: Columns2, color: 'text-violet-400', bg: 'bg-violet-600/10', border: 'border-violet-600/20' },
+  'colon-cancer':   { label: '대장암 예측',   icon: Circle,   color: 'text-amber-400',  bg: 'bg-amber-600/10',  border: 'border-amber-600/20'  },
+  'kidney-failure': { label: '신부전 관리',   icon: Shield,   color: 'text-cyan-400',   bg: 'bg-cyan-600/10',   border: 'border-cyan-600/20'   },
+  'skin-disease':   { label: '피부질환 분류', icon: Activity, color: 'text-rose-400',   bg: 'bg-rose-600/10',   border: 'border-rose-600/20'   },
+  'eye-disease':    { label: '안과 질환',     icon: Eye,      color: 'text-teal-400',   bg: 'bg-teal-600/10',   border: 'border-teal-600/20'   },
 }
 
-function BrainTumorAnalysis() {
+function InfoRow({ label, value }) {
   return (
-    <section className="glass-card rounded-xl overflow-hidden ai-glow">
-      <div className="p-6 border-b border-slate-800 flex justify-between items-center bg-blue-600/5">
-        <div className="flex items-center gap-3">
-          <span className="text-blue-500 text-xl">✨</span>
-          <h3 className="text-xl font-semibold text-slate-200">AI 분석 비교 리포트 — 뇌종양 진단</h3>
-        </div>
-        <div className="flex items-center gap-4 text-xs">
-          <div className="flex items-center gap-2"><span className="w-2 h-2 bg-blue-600 rounded-full" /><span className="text-slate-400">현재 (2023년 11월)</span></div>
-          <div className="flex items-center gap-2"><span className="w-2 h-2 bg-slate-500 rounded-full" /><span className="text-slate-400">이전 (2023년 10월)</span></div>
-        </div>
-      </div>
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 p-6 gap-8">
-        {/* Scan 1 */}
-        <div className="space-y-4">
-          <div className="relative aspect-square rounded-lg bg-slate-900 border border-slate-800 overflow-hidden flex items-center justify-center">
-            <div className="text-slate-700 text-center"><p className="text-5xl mb-2">🧠</p><p className="text-xs">MRI 가로 단면</p></div>
-            <div className="absolute top-4 left-4 px-2 py-1 bg-black/60 rounded text-[10px] text-slate-300 font-bold border border-white/10 uppercase">가로 단면 (Axial)</div>
-            <div className="absolute inset-0 pointer-events-none">
-              <div className="absolute top-1/2 left-0 w-full h-px bg-blue-500/20" />
-              <div className="absolute left-1/2 top-0 w-px h-full bg-blue-500/20" />
-            </div>
-          </div>
-          <div className="p-3 bg-white/5 rounded-lg border border-slate-800">
-            <p className="text-xs text-blue-400 font-bold uppercase mb-1">성장 지수</p>
-            <div className="flex items-end gap-2">
-              <span className="text-2xl font-black text-slate-50">+12%</span>
-              <span className="text-xs text-red-400 mb-1 flex items-center gap-1"><TrendingUp size={14} /> 유의미함</span>
-            </div>
-          </div>
-        </div>
-        {/* Scan 2 */}
-        <div className="space-y-4">
-          <div className="relative aspect-square rounded-lg bg-slate-900 border border-slate-800 overflow-hidden flex items-center justify-center">
-            <div className="text-slate-700 text-center"><p className="text-5xl mb-2">🧠</p><p className="text-xs">MRI 세로 단면</p></div>
-            <div className="absolute top-4 left-4 px-2 py-1 bg-black/60 rounded text-[10px] text-slate-300 font-bold border border-white/10 uppercase">세로 단면 (Sagittal)</div>
-            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-              <div className="w-16 h-16 border-2 border-dashed border-blue-500/50 rounded-full animate-pulse" />
-            </div>
-          </div>
-          <div className="p-3 bg-white/5 rounded-lg border border-slate-800">
-            <p className="text-xs text-blue-400 font-bold uppercase mb-1">분석 신뢰도</p>
-            <div className="flex items-end gap-2">
-              <span className="text-2xl font-black text-slate-50">98.4%</span>
-              <span className="text-xs text-emerald-400 mb-1 flex items-center gap-1"><CheckCircle size={14} /> 고정밀도</span>
-            </div>
-          </div>
-        </div>
-        {/* Insights */}
-        <div className="space-y-4">
-          <h4 className="text-sm font-bold text-slate-300 uppercase tracking-widest border-b border-slate-800 pb-2">AI 주요 분석 결과</h4>
-          <ul className="space-y-3">
-            {AI_INSIGHTS.map(({ icon: Icon, color, title, desc }) => (
-              <li key={title} className="flex items-start gap-3">
-                <Icon size={20} className={`${color} mt-0.5 flex-shrink-0`} />
-                <div><p className="text-sm text-slate-200 font-medium">{title}</p><p className="text-xs text-slate-500">{desc}</p></div>
-              </li>
-            ))}
-          </ul>
-          <div className="pt-4">
-            <button className="w-full bg-blue-600 text-white font-bold py-3 rounded-lg flex items-center justify-center gap-2 hover:bg-blue-700 transition-colors glow-blue">
-              <FileText size={18} /> 전체 PDF 리포트 생성
-            </button>
-          </div>
-        </div>
-      </div>
-    </section>
+    <div>
+      <p className="text-xs text-slate-500 uppercase font-bold tracking-widest">{label}</p>
+      <p className="text-slate-200 font-medium mt-0.5">{value || '-'}</p>
+    </div>
   )
 }
 
-function ComingSoonTab({ label }) {
+function DiagnosisCard({ diagnosis }) {
+  const meta = DISEASE_LABELS[diagnosis.diseaseType] || {}
+  const Icon = meta.icon || FileText
   return (
-    <div className="glass-card rounded-xl p-16 flex flex-col items-center justify-center text-center">
-      <p className="text-5xl mb-4">🚧</p>
-      <h3 className="text-xl font-bold text-slate-300 mb-2">{label}</h3>
-      <p className="text-slate-500 text-sm mb-6">해당 모듈 담당자가 개발 중입니다.</p>
-      <button className="px-6 py-3 bg-blue-600 text-white text-sm font-bold rounded-xl hover:bg-blue-700 transition-colors glow-blue">
-        진단 시작 요청
-      </button>
+    <div className={`glass-card p-5 rounded-xl border ${meta.border || 'border-slate-700'}`}>
+      <div className="flex items-start gap-4">
+        <div className={`w-10 h-10 rounded-xl ${meta.bg || 'bg-slate-800'} flex items-center justify-center flex-shrink-0`}>
+          <Icon size={20} className={meta.color || 'text-slate-400'} />
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center justify-between gap-2 mb-1">
+            <span className={`text-xs font-bold uppercase tracking-wider ${meta.color || 'text-slate-400'}`}>
+              {meta.label || diagnosis.diseaseType}
+            </span>
+            <span className="text-[10px] text-slate-500">
+              {new Date(diagnosis.createdAt).toLocaleDateString('ko-KR')}
+            </span>
+          </div>
+          <h4 className="text-slate-100 font-bold">{diagnosis.title}</h4>
+          {diagnosis.summary && (
+            <p className="text-sm text-slate-400 mt-1 leading-relaxed">{diagnosis.summary}</p>
+          )}
+          {diagnosis.createdBy && (
+            <p className="text-[10px] text-slate-600 mt-2">진단: {diagnosis.createdBy}</p>
+          )}
+        </div>
+      </div>
     </div>
   )
 }
 
 export default function PatientDetailPage() {
   const { id } = useParams()
-  const [searchParams, setSearchParams] = useSearchParams()
-  const navigate = useNavigate()
-  const diseaseParam = searchParams.get('disease')
-  const activeTab = diseaseParam || 'overview'
+  const [patient, setPatient] = useState(null)
+  const [diagnoses, setDiagnoses] = useState([])
+  const [loading, setLoading] = useState(true)
 
-  const switchTab = (key) => {
-    setSearchParams(key === 'overview' ? {} : { disease: key })
+  useEffect(() => {
+    const token = localStorage.getItem('token')
+    const headers = { Authorization: `Bearer ${token}` }
+    Promise.all([
+      axios.get(`/api/patients/${id}`, { headers }),
+      axios.get(`/api/patients/${id}/diagnoses`, { headers }),
+    ])
+      .then(([pRes, dRes]) => {
+        setPatient(pRes.data)
+        setDiagnoses(dRes.data)
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [id])
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[50vh]">
+        <div className="text-center">
+          <div className="w-10 h-10 border-2 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+          <p className="text-slate-400">환자 정보를 불러오는 중...</p>
+        </div>
+      </div>
+    )
   }
 
-  const activeTabInfo = DISEASE_TABS.find(t => t.key === activeTab) || DISEASE_TABS[0]
+  if (!patient) {
+    return (
+      <div className="flex items-center justify-center min-h-[50vh]">
+        <div className="text-center">
+          <p className="text-4xl mb-4">❌</p>
+          <p className="text-slate-300 font-bold">환자를 찾을 수 없습니다</p>
+          <p className="text-slate-500 text-sm mt-2">{id}</p>
+        </div>
+      </div>
+    )
+  }
 
   return (
-    <div className="max-w-7xl mx-auto space-y-6">
-      {/* Back */}
-      <button onClick={() => navigate('/dashboard')} className="flex items-center gap-2 text-slate-400 hover:text-slate-200 text-sm transition-colors">
-        <ArrowLeft size={16} /> 환자 목록으로 돌아가기
-      </button>
+    <div className="max-w-5xl mx-auto space-y-6">
 
-      {/* Profile + Timeline (always visible) */}
+      {/* 환자 프로필 + 안내 */}
       <div className="grid grid-cols-12 gap-6">
-        {/* Patient Profile */}
-        <section className="col-span-12 lg:col-span-4 glass-card p-6 rounded-xl flex flex-col justify-between">
-          <div>
-            <div className="flex justify-between items-start mb-6">
-              <h3 className="text-xl font-semibold text-slate-200">환자 프로필</h3>
-              <span className="text-slate-500 text-lg">🪪</span>
+        {/* 프로필 */}
+        <section className="col-span-12 lg:col-span-4 glass-card p-6 rounded-xl">
+          <div className="flex justify-between items-start mb-5">
+            <h3 className="text-lg font-semibold text-slate-200">환자 프로필</h3>
+            <span className="text-slate-500">🪪</span>
+          </div>
+          <div className="flex items-center gap-4 mb-5">
+            <div className="w-14 h-14 rounded-xl bg-slate-800 flex items-center justify-center border border-slate-700 text-xl font-black text-slate-400">
+              {patient.name?.[0] || '?'}
             </div>
-            <div className="space-y-4">
-              <div className="flex items-center gap-4">
-                <div className="w-16 h-16 rounded-xl bg-slate-800 flex items-center justify-center border border-slate-700 text-2xl font-black text-slate-400">아</div>
-                <div>
-                  <h4 className="text-lg font-bold text-slate-50">아서 모건</h4>
-                  <p className="text-sm text-slate-400">UID: {id}</p>
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4 pt-4 border-t border-slate-800">
-                {[['나이', '42세'], ['성별', '남성'], ['혈액형', 'O형 (Rh+)'], ['최근 검사', '2023.10.24']].map(([label, value]) => (
-                  <div key={label}>
-                    <p className="text-xs text-slate-500 uppercase font-bold tracking-widest">{label}</p>
-                    <p className="text-slate-200 font-medium">{value}</p>
-                  </div>
-                ))}
-              </div>
+            <div>
+              <h4 className="text-lg font-bold text-slate-50">{patient.name}</h4>
+              <p className="text-xs text-slate-500">UID: {patient.uid}</p>
             </div>
           </div>
-          <button className="mt-8 w-full py-2 border border-slate-700 text-slate-300 text-sm font-medium rounded-lg hover:bg-white/5 transition-colors">
-            프로필 수정
-          </button>
+          <div className="grid grid-cols-2 gap-4 pt-4 border-t border-slate-800">
+            <InfoRow label="나이"    value={patient.age ? `${patient.age}세` : null} />
+            <InfoRow label="성별"    value={patient.gender} />
+            <InfoRow label="혈액형"  value={patient.bloodType} />
+            <InfoRow label="최근검사" value={patient.lastExamDate} />
+          </div>
+          {(patient.assignedDoctor || patient.currentMedication || patient.medicalTeam) && (
+            <div className="mt-4 pt-4 border-t border-slate-800 space-y-3">
+              {patient.assignedDoctor    && <InfoRow label="담당의"   value={patient.assignedDoctor} />}
+              {patient.currentMedication && <InfoRow label="복용약물"  value={patient.currentMedication} />}
+              {patient.medicalTeam       && <InfoRow label="의료팀"   value={patient.medicalTeam} />}
+            </div>
+          )}
         </section>
 
-        {/* Timeline */}
-        <section className="col-span-12 lg:col-span-8 glass-card p-6 rounded-xl">
-          <div className="flex justify-between items-center mb-6">
-            <h3 className="text-xl font-semibold text-slate-200">진료 이력 타임라인</h3>
-            <div className="flex gap-2">
-              <button className="text-xs px-3 py-1 bg-slate-800 text-slate-400 rounded-full border border-slate-700">전체</button>
-              <button className="text-xs px-3 py-1 text-slate-500 rounded-full hover:bg-slate-800 transition-colors">영상 의학</button>
+        {/* 우측 패널 */}
+        <div className="col-span-12 lg:col-span-8 flex flex-col gap-4">
+          {/* 진단 안내 */}
+          <div className="glass-card p-6 rounded-xl flex-1">
+            <div className="flex items-center gap-3 mb-4">
+              <span className="text-blue-500 text-xl">✨</span>
+              <h3 className="text-lg font-semibold text-slate-200">진단 분석 안내</h3>
+            </div>
+            <p className="text-slate-400 text-sm leading-relaxed">
+              왼쪽 사이드바에서 진단 항목을 선택하면 해당 환자에 대한 AI 진단을 수행할 수 있습니다.
+              진단 완료 후 리포트가 생성되며, 아래에 자동으로 표시됩니다.
+            </p>
+            <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 gap-2">
+              {Object.entries(DISEASE_LABELS).map(([key, { label, icon: Icon, color, bg, border }]) => (
+                <div key={key} className={`flex items-center gap-2 p-2.5 rounded-lg border ${border} ${bg}`}>
+                  <Icon size={14} className={color} />
+                  <span className={`text-xs font-semibold ${color}`}>{label}</span>
+                </div>
+              ))}
             </div>
           </div>
-          <div className="relative space-y-6 before:absolute before:left-3 before:top-2 before:bottom-2 before:w-px before:bg-slate-800">
-            {TIMELINE.map((item, i) => (
-              <div key={i} className="relative pl-10">
-                <div className={`absolute left-1.5 top-1.5 w-3 h-3 rounded-full ring-4 ${item.active ? 'bg-blue-600 ring-blue-600/10' : 'bg-slate-700 ring-transparent'}`} />
-                <div className={`flex flex-col md:flex-row md:items-center justify-between gap-2 p-4 border rounded-lg ${item.active ? 'bg-white/5 border-slate-800' : 'border-slate-800/50 opacity-70'}`}>
-                  <div>
-                    <span className={`text-[10px] font-bold uppercase tracking-tighter ${item.active ? 'text-blue-400' : 'text-slate-500'}`}>{item.date}</span>
-                    <h5 className="text-slate-200 font-bold">{item.title}</h5>
-                    <p className="text-sm text-slate-400">{item.desc}</p>
-                  </div>
-                  <span className={`text-xs px-2 py-1 rounded w-fit ${item.active ? 'bg-blue-600/10 text-blue-400' : 'bg-slate-800 text-slate-500'}`}>{item.tag}</span>
+
+          {/* 리포트 현황 */}
+          <div className="glass-card p-5 rounded-xl">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-blue-600/10 rounded-xl flex items-center justify-center">
+                  <FileText size={18} className="text-blue-400" />
+                </div>
+                <div>
+                  <p className="text-xs text-slate-500 font-bold uppercase tracking-widest">누적 리포트</p>
+                  <p className="text-2xl font-black text-slate-50">{diagnoses.length}건</p>
                 </div>
               </div>
-            ))}
+              {diagnoses.length > 0 && (
+                <span className="text-xs text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-3 py-1 rounded-full font-bold">
+                  진단 기록 있음
+                </span>
+              )}
+            </div>
           </div>
-        </section>
+        </div>
       </div>
 
-      {/* Disease tabs */}
-      <div className="space-y-4">
-        <div className="flex items-center gap-2">
-          <h3 className="text-sm font-bold text-slate-400 uppercase tracking-widest">질환별 분석 리포트</h3>
-          <span className="text-slate-600 text-xs">— 탭을 선택하거나 사이드바 질환 메뉴를 클릭하세요</span>
-        </div>
-
-        {/* Tab bar */}
-        <div className="flex gap-1 overflow-x-auto pb-1 custom-scrollbar">
-          {DISEASE_TABS.map(({ key, label, color }) => {
-            const isActive = activeTab === key
-            return (
-              <button
-                key={key}
-                onClick={() => switchTab(key)}
-                className={`flex-shrink-0 px-4 py-2.5 rounded-lg text-sm font-semibold transition-all border ${
-                  isActive
-                    ? TAB_COLORS[color]
-                    : 'border-transparent text-slate-500 hover:text-slate-300 hover:bg-white/5'
-                }`}
-              >
-                {label}
-              </button>
-            )
-          })}
-        </div>
-
-        {/* Tab content */}
-        {activeTab === 'overview' && (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {[
-              { icon: Activity, label: '안정성 점수', value: '하락세', bg: 'bg-blue-600/10', iconColor: 'text-blue-500', border: 'border-l-4 border-l-blue-600' },
-              { icon: Pill,     label: '복용 약물',   value: '덱사메타손', bg: 'bg-slate-800', iconColor: 'text-slate-400', border: '' },
-              { icon: Users,    label: '담당 의료팀', value: '종양학 유닛 A', bg: 'bg-slate-800', iconColor: 'text-slate-400', border: '' },
-            ].map(({ icon: Icon, label, value, bg, iconColor, border }) => (
-              <div key={label} className={`glass-card p-6 rounded-xl flex items-center gap-4 ${border}`}>
-                <div className={`w-12 h-12 ${bg} rounded-full flex items-center justify-center flex-shrink-0`}>
-                  <Icon size={22} className={iconColor} />
-                </div>
-                <div>
-                  <p className="text-xs text-slate-500 font-bold uppercase tracking-widest">{label}</p>
-                  <p className="text-xl font-bold text-slate-50">{value}</p>
-                </div>
-              </div>
+      {/* 진단 리포트 목록 */}
+      <section>
+        <h3 className="text-sm font-bold text-slate-400 uppercase tracking-widest mb-4">
+          진단 분석 리포트
+        </h3>
+        {diagnoses.length === 0 ? (
+          <div className="glass-card rounded-xl p-12 text-center">
+            <p className="text-4xl mb-4">📋</p>
+            <h4 className="text-lg font-bold text-slate-300 mb-2">아직 진단 리포트가 없습니다</h4>
+            <p className="text-slate-500 text-sm">
+              왼쪽 사이드바에서 진단 항목을 선택해 첫 번째 리포트를 생성하세요.
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {diagnoses.map(d => (
+              <DiagnosisCard key={d.id} diagnosis={d} />
             ))}
           </div>
         )}
-
-        {activeTab === 'brain-tumor' && <BrainTumorAnalysis />}
-
-        {!['overview', 'brain-tumor'].includes(activeTab) && (
-          <ComingSoonTab label={activeTabInfo.label} />
-        )}
-      </div>
+      </section>
     </div>
   )
 }
