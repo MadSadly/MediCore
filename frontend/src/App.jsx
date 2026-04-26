@@ -1,73 +1,52 @@
-import { useState } from 'react'
-import axios from 'axios'
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import LoginPage from './pages/LoginPage'
+import MainPage from './pages/MainPage'
+import PatientDetailPage from './pages/PatientDetailPage'
+import Layout from './components/Layout'
 
-function StatusBadge({ status }) {
-  if (status === null) return <span className="text-gray-400">대기 중</span>
-  if (status === 'loading') return <span className="text-yellow-500 animate-pulse">확인 중...</span>
-  if (status === 'ok') return <span className="text-green-500 font-bold">연결 성공</span>
-  return <span className="text-red-500 font-bold">연결 실패</span>
+function PrivateRoute({ children }) {
+  const token = localStorage.getItem('token')
+  return token ? children : <Navigate to="/login" replace />
 }
 
-function ServerCard({ title, endpoint, description }) {
-  const [status, setStatus] = useState(null)
-  const [detail, setDetail] = useState('')
-
-  const check = async () => {
-    setStatus('loading')
-    setDetail('')
-    try {
-      const res = await axios.get(endpoint)
-      setStatus('ok')
-      setDetail(JSON.stringify(res.data))
-    } catch (e) {
-      setStatus('error')
-      setDetail(e.message)
-    }
-  }
-
+function ComingSoon({ title }) {
   return (
-    <div className="bg-white rounded-2xl shadow-md p-6 flex flex-col gap-3">
-      <div className="flex justify-between items-center">
-        <h2 className="text-lg font-bold text-gray-800">{title}</h2>
-        <StatusBadge status={status} />
+    <div className="flex items-center justify-center h-64">
+      <div className="text-center">
+        <p className="text-4xl mb-4">🚧</p>
+        <h2 className="text-xl font-bold text-slate-300">{title}</h2>
+        <p className="text-slate-500 mt-2">해당 모듈은 각 팀원이 개발 중입니다.</p>
       </div>
-      <p className="text-sm text-gray-500">{description}</p>
-      <code className="text-xs bg-gray-100 rounded px-2 py-1 text-gray-600">{endpoint}</code>
-      {detail && (
-        <pre className="text-xs bg-gray-50 border rounded p-2 overflow-auto max-h-20">{detail}</pre>
-      )}
-      <button
-        onClick={check}
-        className="mt-auto bg-blue-600 hover:bg-blue-700 text-white rounded-xl py-2 text-sm font-semibold transition-colors"
-      >
-        연결 테스트
-      </button>
     </div>
   )
 }
 
 export default function App() {
   return (
-    <div className="min-h-screen bg-gray-100 p-8">
-      <h1 className="text-3xl font-black text-gray-900 mb-2">MEDI-Zero 서버 연결 테스트</h1>
-      <p className="text-gray-500 mb-8">각 서버의 연결 버튼을 눌러 상태를 확인하세요.</p>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-4xl">
-        <ServerCard
-          title="Spring Boot"
-          endpoint="/api/health"
-          description="React → Vite Proxy → Spring :8080"
-        />
-        <ServerCard
-          title="FastAPI (직접)"
-          endpoint="/ai/health"
-          description="React → Vite Proxy → FastAPI :8000"
-        />
-        <ServerCard
-          title="Spring → FastAPI"
-          endpoint="/api/ai-health"
-          description="React → Spring :8080 → FastAPI :8000"
-        />
-      </div>
-    </div>
+    <BrowserRouter>
+      <Routes>
+        <Route path="/login" element={<LoginPage />} />
+        <Route
+          path="/"
+          element={
+            <PrivateRoute>
+              <Layout />
+            </PrivateRoute>
+          }
+        >
+          <Route index element={<Navigate to="/dashboard" replace />} />
+          <Route path="dashboard" element={<MainPage />} />
+          <Route path="patients/:id" element={<PatientDetailPage />} />
+          <Route path="brain-tumor" element={<ComingSoon title="뇌종양 진단 (변운조)" />} />
+          <Route path="spine-disk" element={<ComingSoon title="허리디스크 (김담현)" />} />
+          <Route path="colon-cancer" element={<ComingSoon title="대장암 예측 (박기완)" />} />
+          <Route path="kidney-failure" element={<ComingSoon title="신부전 관리 (김남준)" />} />
+          <Route path="skin-disease" element={<ComingSoon title="피부질환 분류 (김민수)" />} />
+          <Route path="eye-disease" element={<ComingSoon title="안과 질환 (홍승현)" />} />
+          <Route path="settings" element={<ComingSoon title="설정" />} />
+        </Route>
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </BrowserRouter>
   )
 }
