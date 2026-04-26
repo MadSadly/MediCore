@@ -16,6 +16,8 @@ frontend/dist/
 AI/models/
 AI/__pycache__/
 AI/*.pyc
+AI/venv/
+AI/**/__pycache__/
 
 # GCP 서비스 계정 키 (절대 올리면 안됨)
 secrets/

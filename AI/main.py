@@ -1,32 +1,57 @@
 import os
+import logging
 from contextlib import asynccontextmanager
+from pathlib import Path
 
-from fastapi import FastAPI, File, Form, UploadFile, HTTPException
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
 
-from rag_engine import get_rag_engine
+logger = logging.getLogger("medicore")
+logging.basicConfig(level=logging.INFO)
 
-MODULE_NAME = os.getenv("MODULE_NAME", "skin")
+# .env 로드 (uvicorn이 직접 띄울 때 환경변수 설정)
+_env_path = Path(__file__).parent.parent / ".env"
+if _env_path.exists():
+    for _line in _env_path.read_text(encoding="utf-8").splitlines():
+        _line = _line.strip()
+        if not _line or _line.startswith("#") or "=" not in _line:
+            continue
+        _k, _v = _line.split("=", 1)
+        os.environ.setdefault(_k.strip(), _v.strip())
 
-MODULE_DISPLAY = {
-    "skin":   "피부 진단",
-    "brain":  "뇌종양 진단",
-    "eyes":   "안과 진단",
-    "spine":  "척추 진단",
-    "kidney": "신장 진단",
-    "colon":  "대장암 진단",
-}
+# GCP 키 파일 경로 적용
+_gcp_key = os.getenv("GCP_KEY_PATH")
+if _gcp_key:
+    os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = _gcp_key
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
-    # 서버 시작 시 RAG 엔진(BGE-M3 + Vertex AI) 미리 로드
-    get_rag_engine()
+async def lifespan(_app: FastAPI):
+    _check_gcp()
     yield
 
 
-app = FastAPI(title=f"MEDI-Zero AI Server [{MODULE_NAME}]", lifespan=lifespan)
+def _check_gcp():
+    gcp_project = os.getenv("GCP_PROJECT_ID")
+    gcp_key = os.getenv("GCP_KEY_PATH")
+
+    if not gcp_project:
+        logger.info("GCP 미설정 — Vertex AI 없이 시작합니다.")
+        return
+
+    if gcp_key and not Path(gcp_key).exists():
+        logger.warning(f"GCP 키 파일을 찾을 수 없음: {gcp_key}")
+        return
+
+    try:
+        import vertexai
+        vertexai.init(project=gcp_project, location=os.getenv("GCP_LOCATION", "asia-northeast3"))
+        logger.info(f"Vertex AI 초기화 완료 | 프로젝트: {gcp_project} | 리전: {os.getenv('GCP_LOCATION', 'asia-northeast3')}")
+    except Exception as e:
+        logger.warning(f"Vertex AI 초기화 실패: {e}")
+
+
+app = FastAPI(title="MEDI-Zero AI Server", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -36,46 +61,22 @@ app.add_middleware(
 )
 
 
-class DiagnoseResponse(BaseModel):
-    module: str
-    answer: str
-    sources: list[str]
-    contexts_used: int
-
-
 @app.get("/health")
 def health():
-    return {"status": "ok", "server": "FastAPI", "module": MODULE_NAME}
+    return {"status": "ok", "server": "MEDI-Zero AI"}
 
 
-@app.get("/ai/{module}/health")
-def module_health(module: str):
-    if module != MODULE_NAME:
-        raise HTTPException(status_code=404, detail=f"이 서버는 {MODULE_NAME} 전담입니다.")
-    return {"module": MODULE_NAME, "display": MODULE_DISPLAY.get(MODULE_NAME), "status": "ready"}
+# ── 팀원별 라우터 등록 ───────────────────────────────────────────
+from WJ.router import router as wj_router
+from DH.router import router as dh_router
+from GW.router import router as gw_router
+from MS.router import router as ms_router
+from NJ.router import router as nj_router
+from SH.router import router as sh_router
 
-
-@app.post("/ai/{module}/diagnose", response_model=DiagnoseResponse)
-async def diagnose(
-    module: str,
-    query: str = Form(...),
-    image: UploadFile = File(None),
-):
-    if module != MODULE_NAME:
-        raise HTTPException(status_code=404, detail=f"이 서버는 {MODULE_NAME} 전담입니다.")
-
-    rag = get_rag_engine()
-
-    # 이미지가 있으면 파일명을 쿼리에 포함 (추후 AI 모델 추론 결과로 교체)
-    full_query = query
-    if image:
-        full_query = f"[이미지: {image.filename}] {query}"
-
-    result = rag.query_and_generate(full_query)
-
-    return DiagnoseResponse(
-        module=MODULE_NAME,
-        answer=result["answer"],
-        sources=result["sources"],
-        contexts_used=result["contexts_used"],
-    )
+app.include_router(wj_router)
+app.include_router(dh_router)
+app.include_router(gw_router)
+app.include_router(ms_router)
+app.include_router(nj_router)
+app.include_router(sh_router)
