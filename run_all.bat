@@ -1,4 +1,5 @@
 @echo off
+setlocal enabledelayedexpansion
 chcp 65001 > nul
 echo.
 echo ====================================
@@ -8,6 +9,17 @@ echo.
 
 :: 프로젝트 루트 경로 (이 파일 위치 기준)
 set ROOT=%~dp0
+
+:: ── .env 파일 로드 ───────────────────────────────────────────────
+if not exist "%ROOT%.env" (
+    echo [ERROR] .env 파일이 없습니다. .env_example 을 복사해서 .env 를 만들고 비밀번호를 설정하세요.
+    pause
+    exit /b 1
+)
+for /f "usebackq tokens=1,* delims==" %%a in ("%ROOT%.env") do (
+    set line=%%a
+    if not "!line:~0,1!"=="#" if not "%%a"=="" set %%a=%%b
+)
 
 :: ── 1. PostgreSQL + Redis 시작 ──────────────────────────────────
 echo [1/4] PostgreSQL + Redis 시작 중...

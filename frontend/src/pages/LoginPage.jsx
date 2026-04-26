@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import axios from 'axios'
-import { Stethoscope, Eye, EyeOff } from 'lucide-react'
+import { Eye, EyeOff } from 'lucide-react'
+import MediLogo from '../components/MediLogo'
 
 export default function LoginPage() {
   const [tab, setTab] = useState('login')
@@ -53,9 +54,7 @@ export default function LoginPage() {
       <div className="w-full max-w-md">
         {/* Logo */}
         <div className="flex items-center justify-center gap-3 mb-8">
-          <div className="bg-blue-600 p-3 rounded-xl glow-blue">
-            <Stethoscope size={28} className="text-white" />
-          </div>
+          <MediLogo size={52} />
           <div>
             <h1 className="text-2xl font-black text-white tracking-wide">MEDICORE</h1>
             <p className="text-[10px] text-blue-400 uppercase tracking-widest font-bold">AI 정밀 진단 시스템</p>

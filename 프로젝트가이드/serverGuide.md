@@ -4,7 +4,7 @@
 
 ## 프로젝트에서 사용하는 서버
 
-총 7개의 서버(컨테이너)로 구성됨.
+총 10개의 서버(컨테이너)로 구성됨.
 
 | 서버 | 역할 |
 |------|------|
@@ -141,10 +141,10 @@ uvicorn main:app --reload --port 8000
 
 ### 코드 관리 (Git)
 
-각자 본인 브랜치에서 작업 후 develop으로 PR.
+각자 본인 브랜치에서 작업 후 main으로 PR.
 
 ```
-feature/본인모듈  →  develop  →  main
+feature/본인모듈  →  main
 ```
 
 자세한 내용은 `githubGuide.md` 참고.

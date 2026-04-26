@@ -1,0 +1,89 @@
+<svg width="800" height="440" xmlns="http://www.w3.org/2000/svg" font-family="'Segoe UI', Arial, sans-serif">
+
+  <!-- Background -->
+  <rect width="800" height="440" fill="#F8F9FA" rx="12"/>
+
+  <!-- Title -->
+  <text x="400" y="38" text-anchor="middle" font-size="20" font-weight="bold" fill="#2C3E50">로컬 브랜치 vs 원격 브랜치</text>
+  <text x="400" y="60" text-anchor="middle" font-size="13" fill="#7F8C8D">push / pull 명령어를 직접 실행해야만 동기화됩니다</text>
+
+  <!-- ── LOCAL BOX ── -->
+  <rect x="30" y="80" width="300" height="310" rx="14" fill="#EBF5FB" stroke="#2980B9" stroke-width="2.5"/>
+  <!-- header -->
+  <rect x="30" y="80" width="300" height="48" rx="14" fill="#2980B9"/>
+  <rect x="30" y="114" width="300" height="14" fill="#2980B9"/>
+  <text x="180" y="111" text-anchor="middle" font-size="17" font-weight="bold" fill="white">💻  내 PC (로컬)</text>
+
+  <!-- local main -->
+  <rect x="60" y="148" width="240" height="62" rx="9" fill="white" stroke="#2980B9" stroke-width="1.5"/>
+  <text x="180" y="174" text-anchor="middle" font-size="14" font-weight="bold" fill="#1A5276">main</text>
+  <text x="180" y="194" text-anchor="middle" font-size="11" fill="#7F8C8D">내 컴퓨터에 저장된 main 브랜치</text>
+
+  <!-- local feature -->
+  <rect x="60" y="228" width="240" height="62" rx="9" fill="white" stroke="#2980B9" stroke-width="1.5"/>
+  <text x="180" y="254" text-anchor="middle" font-size="14" font-weight="bold" fill="#1A5276">feature/brain</text>
+  <text x="180" y="274" text-anchor="middle" font-size="11" fill="#7F8C8D">내 컴퓨터에 저장된 작업 브랜치</text>
+
+  <!-- local note -->
+  <rect x="55" y="308" width="250" height="68" rx="8" fill="#D6EAF8" stroke="#85C1E9" stroke-width="1"/>
+  <text x="180" y="328" text-anchor="middle" font-size="11" fill="#1A5276">• 인터넷 없어도 접근 가능</text>
+  <text x="180" y="346" text-anchor="middle" font-size="11" fill="#1A5276">• 내 PC에만 존재</text>
+  <text x="180" y="364" text-anchor="middle" font-size="11" fill="#E74C3C">• push 전까지 팀원은 볼 수 없음</text>
+
+  <!-- ── REMOTE BOX ── -->
+  <rect x="470" y="80" width="300" height="310" rx="14" fill="#E9F7EF" stroke="#27AE60" stroke-width="2.5"/>
+  <!-- header -->
+  <rect x="470" y="80" width="300" height="48" rx="14" fill="#27AE60"/>
+  <rect x="470" y="114" width="300" height="14" fill="#27AE60"/>
+  <text x="620" y="111" text-anchor="middle" font-size="17" font-weight="bold" fill="white">☁️  GitHub 서버 (원격)</text>
+
+  <!-- remote origin/main -->
+  <rect x="500" y="148" width="240" height="62" rx="9" fill="white" stroke="#27AE60" stroke-width="1.5"/>
+  <text x="620" y="174" text-anchor="middle" font-size="14" font-weight="bold" fill="#1E8449">origin/main</text>
+  <text x="620" y="194" text-anchor="middle" font-size="11" fill="#7F8C8D">GitHub에 저장된 main 브랜치</text>
+
+  <!-- remote origin/feature -->
+  <rect x="500" y="228" width="240" height="62" rx="9" fill="white" stroke="#27AE60" stroke-width="1.5"/>
+  <text x="620" y="254" text-anchor="middle" font-size="14" font-weight="bold" fill="#1E8449">origin/feature/brain</text>
+  <text x="620" y="274" text-anchor="middle" font-size="11" fill="#7F8C8D">GitHub에 저장된 작업 브랜치</text>
+
+  <!-- remote note -->
+  <rect x="495" y="308" width="250" height="68" rx="8" fill="#D5F5E3" stroke="#82E0AA" stroke-width="1"/>
+  <text x="620" y="328" text-anchor="middle" font-size="11" fill="#1D6A39">• 인터넷으로 누구나 접근 가능</text>
+  <text x="620" y="346" text-anchor="middle" font-size="11" fill="#1D6A39">• 팀원 모두가 공유하는 저장소</text>
+  <text x="620" y="364" text-anchor="middle" font-size="11" fill="#1D6A39">• pull 해야 내 로컬에 반영됨</text>
+
+  <!-- ── ARROWS ── -->
+  <defs>
+    <marker id="arrowPush" markerWidth="9" markerHeight="9" refX="8" refY="4" orient="auto">
+      <path d="M0,0 L0,8 L9,4 z" fill="#E74C3C"/>
+    </marker>
+    <marker id="arrowPull" markerWidth="9" markerHeight="9" refX="1" refY="4" orient="auto">
+      <path d="M9,0 L9,8 L0,4 z" fill="#8E44AD"/>
+    </marker>
+  </defs>
+
+  <!-- push arrow: local main → remote main -->
+  <line x1="330" y1="169" x2="470" y2="169" stroke="#E74C3C" stroke-width="2.2" marker-end="url(#arrowPush)" stroke-dasharray="6,3"/>
+  <text x="400" y="161" text-anchor="middle" font-size="11" font-weight="bold" fill="#E74C3C">git push</text>
+
+  <!-- pull arrow: remote main → local main -->
+  <line x1="470" y1="190" x2="330" y2="190" stroke="#8E44AD" stroke-width="2.2" marker-end="url(#arrowPull)" stroke-dasharray="6,3"/>
+  <text x="400" y="205" text-anchor="middle" font-size="11" font-weight="bold" fill="#8E44AD">git pull</text>
+
+  <!-- push arrow: local feature → remote feature -->
+  <line x1="330" y1="249" x2="470" y2="249" stroke="#E74C3C" stroke-width="2.2" marker-end="url(#arrowPush)" stroke-dasharray="6,3"/>
+  <text x="400" y="241" text-anchor="middle" font-size="11" font-weight="bold" fill="#E74C3C">git push</text>
+
+  <!-- pull arrow: remote feature → local feature -->
+  <line x1="470" y1="270" x2="330" y2="270" stroke="#8E44AD" stroke-width="2.2" marker-end="url(#arrowPull)" stroke-dasharray="6,3"/>
+  <text x="400" y="285" text-anchor="middle" font-size="11" font-weight="bold" fill="#8E44AD">git pull</text>
+
+  <!-- center label -->
+  <text x="400" y="330" text-anchor="middle" font-size="13" font-weight="bold" fill="#E74C3C">🔄 자동 동기화 안 됨!</text>
+  <text x="400" y="350" text-anchor="middle" font-size="11" fill="#7F8C8D">명령어를 실행해야만 반영됩니다</text>
+
+  <!-- bottom border line -->
+  <line x1="30" y1="415" x2="770" y2="415" stroke="#D5D8DC" stroke-width="1"/>
+  <text x="400" y="430" text-anchor="middle" font-size="10" fill="#BDC3C7">로컬과 원격은 완전히 독립된 저장소입니다</text>
+</svg>

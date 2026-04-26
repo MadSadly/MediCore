@@ -4,26 +4,26 @@ uvicorn==0.27.1
 python-multipart==0.0.9
 
 # [Google Vertex AI - Gemini LLM]
-google-cloud-aiplatform==1.49.0   # Vertex AI SDK (Gemini 포함)
-google-auth==2.29.0               # 서비스 계정 인증
+google-cloud-aiplatform==1.49.0
+google-auth==2.29.0
 
-# [Vision AI - 피부, 척추, 뇌종양, 안과]
+# [Vision AI]
 ultralytics==8.1.0
 torch>=2.6.0
 torchvision>=0.21.0
 opencv-python-headless
 grad-cam==1.5.0
 
-# [Tabular & ML - 신부전, 대장암]
+# [Tabular & ML]
 pytorch-tabnet==4.1.0
 scikit-learn==1.4.0
 pandas==2.2.0
 shap==0.44.0
 
-# [RAG 임베딩 - BGE-M3]
-FlagEmbedding==1.2.9              # BGE-M3 전용 라이브러리 (sentence-transformers보다 빠름)
+# [RAG]
+FlagEmbedding>=1.2.10
 
-# [NLP & RAG 파이프라인]
+# [NLP & RAG Pipeline]
 langchain==0.1.12
 langgraph==0.0.30
 psycopg2-binary==2.9.9
