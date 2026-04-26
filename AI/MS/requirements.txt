@@ -1,0 +1,9 @@
+fastapi==0.110.0
+uvicorn==0.27.1
+python-multipart==0.0.9
+torch==2.2.0
+torchvision==0.17.0
+opencv-python-headless
+grad-cam==1.5.0
+Pillow
+numpy
