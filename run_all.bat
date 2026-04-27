@@ -56,7 +56,7 @@ start "MEDI-Zero Backend :8080" cmd /k "chcp 65001 > nul && cd /d %ROOT%backend-
 
 :: ── 4. FastAPI AI 서버 ───────────────────────────────────────────
 echo [4/4] FastAPI AI 서버 시작 중...
-start "MEDI-Zero AI Server :8000" cmd /k "chcp 65001 > nul && cd /d %ROOT%AI && (if not exist venv python -m venv venv) && call venv\Scripts\activate && uvicorn main:app --reload --port 8000"
+start "MEDI-Zero AI Server :8000" cmd /k "chcp 65001 > nul && cd /d %ROOT%AI && venv\Scripts\uvicorn main:app --reload --port 8000"
 
 :: ── 5. React 프론트엔드 ──────────────────────────────────────────
 echo [5/4] React 프론트엔드 시작 중...

@@ -4,11 +4,125 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, File, Form, UploadFile, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
-from schemas import DiagnoseResponse, MultiDiagnoseResponse, QualityCheck, DiseaseCandidate
-from quality_check import check_quality
-from model import load_model, predict, DISEASE_CLASSES
+try:
+    from MS.schemas import DiagnoseResponse, MultiDiagnoseResponse, QualityCheck, DiseaseCandidate
+    from MS.quality_check import check_quality
+    from MS.model import load_model, predict, DISEASE_CLASSES
+except ImportError:
+    from schemas import DiagnoseResponse, MultiDiagnoseResponse, QualityCheck, DiseaseCandidate
+    from quality_check import check_quality
+    from model import load_model, predict, DISEASE_CLASSES
 
 MODULE = "skin"
+
+# 트리아지 등급 및 임상 정보
+TRIAGE_INFO = {
+    "악성흑색종": {
+        "level": "RED",
+        "label": "🔴 즉시 전원 권고",
+        "features": "비대칭(A) · 불규칙 경계(B) · 다양한 색조(C) · 직경 6mm 이상(D) · 빠른 변화(E)",
+        "action": "즉시 피부과/외과 전문의 의뢰. 광범위 절제술 및 감시림프절 생검 필요.",
+        "guideline": "NCCN Melanoma Guidelines v3.2024",
+    },
+    "기저세포암": {
+        "level": "RED",
+        "label": "🔴 즉시 전원 권고",
+        "features": "진주빛 반투명 결절 · 모세혈관 확장 · 중심 궤양 · 서서히 성장",
+        "action": "피부과/외과 전문의 의뢰. Mohs 수술 또는 광범위 절제 필요.",
+        "guideline": "NCCN Basal Cell Skin Cancer Guidelines v1.2024",
+    },
+    "편평세포암": {
+        "level": "RED",
+        "label": "🔴 즉시 전원 권고",
+        "features": "불규칙한 각화성 판 · 궤양 · 딱지 · 전이 가능성",
+        "action": "즉시 피부과/외과 전문의 의뢰. 림프절 전이 여부 영상 검사 필요.",
+        "guideline": "NCCN Squamous Cell Skin Cancer Guidelines v1.2024",
+    },
+    "보웬병": {
+        "level": "RED",
+        "label": "🔴 즉시 전원 권고",
+        "features": "경계 불규칙 홍반성 판 · 인설 동반 · 서서히 확대 · 편평세포암 전단계",
+        "action": "피부과 전문의 의뢰. 냉동치료/국소 5-FU/광역동치료/레이저 적용.",
+        "guideline": "BAD Bowen's Disease Guidelines 2023",
+    },
+    "광선각화증": {
+        "level": "YELLOW",
+        "label": "🟡 빠른 처치 필요",
+        "features": "거친 표면의 홍반성 반 · 자외선 노출 부위 호발 · 전암성 병변",
+        "action": "피부과 외래 방문 권고. 냉동치료/국소 5-FU/광역동치료 고려.",
+        "guideline": "AAD Actinic Keratosis Guidelines 2021",
+    },
+    "화농 육아종": {
+        "level": "YELLOW",
+        "label": "🟡 빠른 처치 필요",
+        "features": "적색 혈관성 구진 · 경미한 자극에도 쉽게 출혈 · 빠른 성장",
+        "action": "피부과 외래 방문. 외과적 절제 또는 레이저 치료 시행.",
+        "guideline": "DermNet Clinical Guidelines 2023",
+    },
+    "멜라닌세포모반": {
+        "level": "GREEN",
+        "label": "🟢 정기 관찰",
+        "features": "경계 규칙 · 색 균일 · ABCDE 기준 이상 없을 경우 양성 가능성 높음",
+        "action": "6~12개월마다 정기 관찰. ABCDE 기준 변화 시 즉시 피부과 방문.",
+        "guideline": "AAD Melanocytic Nevus Guidelines 2022",
+    },
+    "비립종": {
+        "level": "GREEN",
+        "label": "🟢 일반",
+        "features": "1~2mm 백색 구진 · 표피 낭종 · 양성 병변",
+        "action": "치료 불필요. 미용 목적 제거 원할 시 피부과 상담.",
+        "guideline": "DermNet Clinical Guidelines 2023",
+    },
+    "사마귀": {
+        "level": "GREEN",
+        "label": "🟢 일반",
+        "features": "HPV 감염성 · 표면 거친 구진 · 전염성 있음",
+        "action": "피부과 외래. 냉동치료/레이저/살리실산 치료.",
+        "guideline": "AAD Wart Guidelines 2022",
+    },
+    "지루각화증": {
+        "level": "GREEN",
+        "label": "🟢 일반",
+        "features": "붙어있는 느낌의 갈색 구진 · 경계 명확 · 50대 이후 호발 · 양성",
+        "action": "치료 불필요. 자극·미용 목적 시 피부과 냉동치료/레이저.",
+        "guideline": "DermNet Clinical Guidelines 2023",
+    },
+    "표피낭종": {
+        "level": "GREEN",
+        "label": "🟢 일반",
+        "features": "피부 내 케라틴 낭종 · 중심 모공 · 감염 시 발적/압통",
+        "action": "감염 없으면 경과 관찰. 감염·불편감 시 피부과 절개 배농.",
+        "guideline": "DermNet Clinical Guidelines 2023",
+    },
+    "피부섬유종": {
+        "level": "GREEN",
+        "label": "🟢 일반",
+        "features": "단단한 갈색 결절 · dimple sign 양성 · 하지 호발 · 양성",
+        "action": "치료 불필요. 크기 변화·통증 있을 경우 피부과 상담.",
+        "guideline": "DermNet Clinical Guidelines 2023",
+    },
+    "피지샘증식증": {
+        "level": "GREEN",
+        "label": "🟢 일반",
+        "features": "중심 함몰의 황백색 구진 · 안면 호발 · 중년 이후 발생 · 양성",
+        "action": "치료 불필요. 미용 목적 시 레이저/전기소작술 고려.",
+        "guideline": "DermNet Clinical Guidelines 2023",
+    },
+    "혈관종": {
+        "level": "GREEN",
+        "label": "🟢 일반",
+        "features": "적색~보라색 혈관성 병변 · 압박 시 색 소실 · 대부분 양성",
+        "action": "경과 관찰. 크기 증가·출혈 시 피부과/외과 상담.",
+        "guideline": "DermNet Clinical Guidelines 2023",
+    },
+    "흑색점": {
+        "level": "GREEN",
+        "label": "🟢 정기 관찰",
+        "features": "균일한 갈색 반점 · 경계 명확 · 흑색종과 감별 중요",
+        "action": "6~12개월 정기 관찰. 색·모양 변화 시 즉시 피부과 방문.",
+        "guideline": "AAD Lentigo Guidelines 2022",
+    },
+}
 
 # 질환별 간략 설명 및 권고사항 (리포트 생성용)
 DISEASE_INFO = {
@@ -39,6 +153,7 @@ def build_report(
     quality_warning: str | None,
 ) -> str:
     desc, recommendation = DISEASE_INFO.get(disease_ko, ("알 수 없는 질환입니다.", "전문의 진료를 받으세요."))
+    triage = TRIAGE_INFO.get(disease_ko, {})
     top3_lines = "\n".join(
         f"  {i+1}. {c['disease_ko']} ({c['disease_en']}): {c['confidence']}%"
         for i, c in enumerate(top3)
@@ -47,15 +162,23 @@ def build_report(
     if not quality_passed and quality_warning:
         quality_note = f"\n[이미지 품질 경고] {quality_warning}\n"
 
+    triage_line = f"  {triage.get('label', '🟢 일반')}" if triage else "  🟢 일반"
+    features_line = f"  {triage.get('features', '-')}" if triage else "  -"
+    action_line = f"  {triage.get('action', recommendation)}" if triage else f"  {recommendation}"
+    guideline_line = f"  {triage.get('guideline', '-')}" if triage else "  -"
+
     return (
         f"=== 피부 AI 진단 리포트 ===\n"
         f"{quality_note}"
+        f"\n[트리아지 등급]\n{triage_line}\n"
         f"\n[진단 결과]\n"
         f"  질환명: {disease_ko} ({disease_en})\n"
         f"  판독 신뢰도: {confidence:.1f}%\n"
         f"\n[감별 진단 Top 3]\n{top3_lines}\n"
+        f"\n[임상 특징]\n{features_line}\n"
         f"\n[질환 설명]\n  {desc}\n"
-        f"\n[권고사항]\n  {recommendation}\n"
+        f"\n[권고 처치]\n{action_line}\n"
+        f"\n[참고 가이드라인]\n{guideline_line}\n"
         f"\n※ 본 결과는 AI 보조 진단이며 최종 판단은 임상의가 내려야 합니다."
     )
 
@@ -137,6 +260,7 @@ async def diagnose(
         result["top3"], quality["passed"], quality["warning"],
     )
 
+    triage = TRIAGE_INFO.get(result["disease_ko"], {})
     return DiagnoseResponse(
         patient_id=patient_id,
         image_name=image.filename,
@@ -148,6 +272,11 @@ async def diagnose(
         gradcam_b64=gradcam_b64,
         report=report,
         success=True,
+        triage_level=triage.get("level", "GREEN"),
+        triage_label=triage.get("label", "🟢 일반"),
+        clinical_features=triage.get("features"),
+        clinical_action=triage.get("action"),
+        guideline=triage.get("guideline"),
     )
 
 
