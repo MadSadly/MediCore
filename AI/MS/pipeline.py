@@ -176,7 +176,7 @@ def build_pipeline() -> StateGraph:
     graph.add_node("gradcam",          gradcam_node)
     graph.add_node("rag",              rag_node)
     graph.add_node("gradcam_explain",  gradcam_explain_node)
-    graph.add_node("report",           report_node)
+    graph.add_node("generate_report",  report_node)
 
     graph.set_entry_point("quality_check")
 
@@ -194,8 +194,8 @@ def build_pipeline() -> StateGraph:
     # gradcam, rag 병렬 실행 → 둘 다 끝나면 gradcam_explain
     graph.add_edge("gradcam", "rag")
     graph.add_edge("rag",     "gradcam_explain")
-    graph.add_edge("gradcam_explain", "report")
-    graph.add_edge("report",  END)
+    graph.add_edge("gradcam_explain", "generate_report")
+    graph.add_edge("generate_report", END)
 
     return graph.compile()
 

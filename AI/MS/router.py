@@ -1,7 +1,12 @@
+import logging
+import traceback
+
 from fastapi import APIRouter, File, Form, UploadFile, HTTPException
 
 from MS.schemas import DiagnoseResponse, MultiDiagnoseResponse, QualityCheck, DiseaseCandidate
 from MS.pipeline import run_pipeline
+
+logger = logging.getLogger("medicore.skin.router")
 
 router = APIRouter()
 
@@ -62,6 +67,7 @@ async def skin_diagnose(
     try:
         state = run_pipeline(image_bytes, image.filename, patient_id)
     except Exception as e:
+        logger.error(f"진단 파이프라인 오류: {e}\n{traceback.format_exc()}")
         raise HTTPException(status_code=503, detail=f"진단 파이프라인 오류: {e}")
 
     return _state_to_response(state, image.filename)
