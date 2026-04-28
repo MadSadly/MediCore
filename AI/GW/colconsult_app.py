@@ -1,11 +1,15 @@
+import os
+from dotenv import load_dotenv
 import streamlit as st
 import pandas as pd
 import joblib
 import requests
 import google.generativeai as genai
 
+load_dotenv()
+my_api_key = os.getenv("Gemini_API_key")
 # Gemini API 및 Spring Boot API 설정
-genai.configure(api_key="AIzaSyCry1oySeOFzgpbyeRedS1GGccKm6hR0Po")
+genai.configure(api_key=my_api_key)
 SPRING_BOOT_API_URL = "http://localhost:8080/api/consultations/save"
 
 class ConsultationService:
