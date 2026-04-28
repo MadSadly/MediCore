@@ -270,59 +270,66 @@ export default function SkinDiseasePage() {
               </div>
             </div>
 
-            {/* 오른쪽: Grad-CAM 열지도 */}
+            {/* 오른쪽: 원본 vs Grad-CAM 비교 */}
             <div className="glass-card rounded-2xl p-6 border border-slate-700/50">
               <div className="flex items-center gap-2 mb-5">
                 <span className="w-2 h-2 rounded-full bg-amber-400" />
-                <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest">Grad-CAM 열지도 분석</h3>
+                <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest">원본 · Grad-CAM 비교</h3>
               </div>
-              {result.gradcam_b64 ? (
-                <div className="rounded-xl overflow-hidden border border-slate-700 mb-3">
-                  <img
-                    src={`data:image/png;base64,${result.gradcam_b64}`}
-                    alt="Grad-CAM"
-                    className="w-full h-52 object-cover"
-                  />
+              <div className="grid grid-cols-2 gap-3 mb-4">
+                {/* 원본 이미지 */}
+                <div>
+                  <p className="text-[10px] text-slate-500 text-center mb-1.5 font-semibold uppercase tracking-wider">원본</p>
+                  {result.original_b64 ? (
+                    <div className="rounded-xl overflow-hidden border border-slate-700">
+                      <img
+                        src={`data:image/png;base64,${result.original_b64}`}
+                        alt="원본 이미지"
+                        className="w-full h-44 object-cover"
+                      />
+                    </div>
+                  ) : (
+                    <div className="rounded-xl overflow-hidden border border-slate-700">
+                      <img
+                        src={preview}
+                        alt="원본 이미지"
+                        className="w-full h-44 object-cover"
+                      />
+                    </div>
+                  )}
                 </div>
-              ) : (
-                <div className="rounded-xl bg-slate-800/50 border border-slate-700 h-52 flex items-center justify-center mb-3">
-                  <p className="text-slate-600 text-sm">Grad-CAM 이미지 없음</p>
+                {/* Grad-CAM 히트맵 */}
+                <div>
+                  <p className="text-[10px] text-slate-500 text-center mb-1.5 font-semibold uppercase tracking-wider">Grad-CAM</p>
+                  {result.gradcam_b64 ? (
+                    <div className="rounded-xl overflow-hidden border border-amber-700/40">
+                      <img
+                        src={`data:image/png;base64,${result.gradcam_b64}`}
+                        alt="Grad-CAM 히트맵"
+                        className="w-full h-44 object-cover"
+                      />
+                    </div>
+                  ) : (
+                    <div className="rounded-xl bg-slate-800/50 border border-slate-700 h-44 flex items-center justify-center">
+                      <p className="text-slate-600 text-xs text-center px-2">Grad-CAM<br/>이미지 없음</p>
+                    </div>
+                  )}
                 </div>
-              )}
-              <p className="text-xs text-slate-500 text-center">AI가 진단에 집중한 병변 영역 시각화</p>
+              </div>
+              <p className="text-xs text-slate-500 text-center">빨간색/주황색 영역 = AI가 집중한 병변 부위</p>
             </div>
           </div>
 
-          {/* 임상 특징 + 권고 처치 + 가이드라인 */}
-          {result.clinical_features && (
-            <div className="glass-card rounded-2xl p-6 border border-slate-700/50">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                {/* 임상 특징 */}
-                <div>
-                  <div className="flex items-center gap-2 mb-3">
-                    <span className="w-2 h-2 rounded-full bg-blue-400" />
-                    <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest">임상 특징</h3>
-                  </div>
-                  <p className="text-sm text-slate-300 leading-relaxed">{result.clinical_features}</p>
-                </div>
-                {/* 권고 처치 */}
-                <div>
-                  <div className="flex items-center gap-2 mb-3">
-                    <span className="w-2 h-2 rounded-full bg-rose-400" />
-                    <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest">권고 처치</h3>
-                  </div>
-                  <p className="text-sm text-slate-300 leading-relaxed">{result.clinical_action}</p>
-                </div>
-                {/* 가이드라인 */}
-                <div>
-                  <div className="flex items-center gap-2 mb-3">
-                    <span className="w-2 h-2 rounded-full bg-emerald-400" />
-                    <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest">참고 가이드라인</h3>
-                  </div>
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded-lg text-xs font-bold">
-                    📋 {result.guideline}
-                  </span>
-                </div>
+          {/* Gemini Vision 판단 근거 */}
+          {result.gradcam_explanation && (
+            <div className="glass-card rounded-2xl p-6 border border-amber-500/20">
+              <div className="flex items-center gap-2 mb-4">
+                <span className="w-2 h-2 rounded-full bg-amber-400" />
+                <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest">AI 판단 근거 (Gemini Vision 분석)</h3>
+              </div>
+              <div className="flex gap-3">
+                <span className="text-amber-400 text-lg flex-shrink-0">🔍</span>
+                <p className="text-sm text-slate-300 leading-relaxed">{result.gradcam_explanation}</p>
               </div>
             </div>
           )}

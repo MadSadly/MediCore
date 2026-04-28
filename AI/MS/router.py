@@ -1,26 +1,56 @@
 from fastapi import APIRouter, File, Form, UploadFile, HTTPException
 
 from MS.schemas import DiagnoseResponse, MultiDiagnoseResponse, QualityCheck, DiseaseCandidate
-from MS.quality_check import check_quality
-from MS.model import load_model, predict, DISEASE_CLASSES
-from MS.main import build_report
+from MS.pipeline import run_pipeline
 
 router = APIRouter()
 
-# ──────────────────────────────────────────────────────────────
-# 통합 AI 서버(AI/main.py)가 이 router를 prefix="/ai" 로 mount함
-# 프론트엔드 → Vite proxy /ai/* → localhost:8000/* → /skin/*
-# ──────────────────────────────────────────────────────────────
+
+def _state_to_response(state: dict, image_name: str) -> DiagnoseResponse:
+    """파이프라인 State → DiagnoseResponse 변환."""
+    quality_obj = QualityCheck(
+        passed=state["quality_passed"],
+        sharpness_score=state["sharpness_score"],
+        brightness_score=state["brightness_score"],
+        warning=state.get("quality_warning"),
+    )
+    top3 = [DiseaseCandidate(**c) for c in state["top3"]] if state.get("top3") else None
+
+    return DiagnoseResponse(
+        patient_id=state.get("patient_id"),
+        image_name=image_name,
+        quality_check=quality_obj,
+        disease_ko=state.get("disease_ko"),
+        disease_en=state.get("disease_en"),
+        confidence=state.get("confidence"),
+        top3=top3,
+        original_b64=state.get("original_b64"),
+        gradcam_b64=state.get("gradcam_b64"),
+        gradcam_explanation=state.get("gradcam_explanation"),
+        report=state.get("report", ""),
+        triage_level=state.get("triage_level"),
+        triage_label=state.get("triage_label"),
+        success=state.get("success", False),
+        error=state.get("error"),
+    )
+
 
 @router.get("/skin/health")
 def skin_health():
-    return {"module": "skin", "display": "피부 질환 진단", "status": "ready", "classes": len(DISEASE_CLASSES)}
+    from MS.model import DISEASE_CLASSES
+    return {
+        "module":  "skin",
+        "display": "피부 질환 진단",
+        "status":  "ready",
+        "classes": len(DISEASE_CLASSES),
+        "pipeline": "LangGraph",
+    }
 
 
 @router.post("/skin/diagnose", response_model=DiagnoseResponse)
 async def skin_diagnose(
-    image: UploadFile = File(...),
-    patient_id: str = Form(None),
+    image:      UploadFile = File(...),
+    patient_id: str        = Form(None),
 ):
     if image.content_type not in ("image/jpeg", "image/png"):
         raise HTTPException(status_code=400, detail="JPG 또는 PNG 파일만 업로드 가능합니다.")
@@ -29,64 +59,31 @@ async def skin_diagnose(
     if len(image_bytes) > 10 * 1024 * 1024:
         raise HTTPException(status_code=400, detail="파일 크기가 10MB를 초과합니다.")
 
-    quality = check_quality(image_bytes)
-    quality_obj = QualityCheck(**quality)
-
-    if not quality["passed"]:
-        return DiagnoseResponse(
-            patient_id=patient_id,
-            image_name=image.filename,
-            quality_check=quality_obj,
-            report=f"[이미지 품질 불량] {quality['warning']}",
-            success=False,
-            error=quality["warning"],
-        )
-
     try:
-        result = predict(image_bytes)
-    except FileNotFoundError as e:
-        raise HTTPException(status_code=503, detail=str(e))
+        state = run_pipeline(image_bytes, image.filename, patient_id)
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"진단 파이프라인 오류: {e}")
 
-    from MS.gradcam import generate_gradcam_b64
-    gradcam_b64 = generate_gradcam_b64(image_bytes, result["class_idx"])
-    top3 = [DiseaseCandidate(**c) for c in result["top3"]]
-    report = build_report(
-        result["disease_ko"], result["disease_en"], result["confidence"],
-        result["top3"], quality["passed"], quality["warning"],
-    )
-
-    return DiagnoseResponse(
-        patient_id=patient_id,
-        image_name=image.filename,
-        quality_check=quality_obj,
-        disease_ko=result["disease_ko"],
-        disease_en=result["disease_en"],
-        confidence=result["confidence"],
-        top3=top3,
-        gradcam_b64=gradcam_b64,
-        report=report,
-        success=True,
-    )
+    return _state_to_response(state, image.filename)
 
 
 @router.post("/skin/diagnose/multi", response_model=MultiDiagnoseResponse)
 async def skin_diagnose_multi(
-    images: list[UploadFile] = File(...),
-    patient_id: str = Form(None),
+    images:     list[UploadFile] = File(...),
+    patient_id: str              = Form(None),
 ):
     if len(images) > 10:
         raise HTTPException(status_code=400, detail="한 번에 최대 10개 이미지까지 업로드 가능합니다.")
 
     results = []
-    from MS.gradcam import generate_gradcam_b64
-
     for img_file in images:
         if img_file.content_type not in ("image/jpeg", "image/png"):
             results.append(DiagnoseResponse(
                 image_name=img_file.filename,
-                quality_check=QualityCheck(passed=False, sharpness_score=0, brightness_score=0, warning="지원하지 않는 형식"),
+                quality_check=QualityCheck(passed=False, sharpness_score=0, brightness_score=0,
+                                           warning="지원하지 않는 형식"),
                 report="지원하지 않는 이미지 형식입니다.",
-                success=False, error="지원하지 않는 이미지 형식입니다.",
+                success=False, error="지원하지 않는 이미지 형식",
             ))
             continue
 
@@ -94,44 +91,26 @@ async def skin_diagnose_multi(
         if len(image_bytes) > 10 * 1024 * 1024:
             results.append(DiagnoseResponse(
                 image_name=img_file.filename,
-                quality_check=QualityCheck(passed=False, sharpness_score=0, brightness_score=0, warning="10MB 초과"),
+                quality_check=QualityCheck(passed=False, sharpness_score=0, brightness_score=0,
+                                           warning="10MB 초과"),
                 report="파일 크기가 10MB를 초과합니다.",
                 success=False, error="파일 크기 초과",
             ))
             continue
 
-        quality = check_quality(image_bytes)
-        quality_obj = QualityCheck(**quality)
-        if not quality["passed"]:
-            results.append(DiagnoseResponse(
-                patient_id=patient_id, image_name=img_file.filename,
-                quality_check=quality_obj,
-                report=f"[품질 불량] {quality['warning']}",
-                success=False, error=quality["warning"],
-            ))
-            continue
-
         try:
-            result = predict(image_bytes)
-        except FileNotFoundError as e:
-            raise HTTPException(status_code=503, detail=str(e))
+            state = run_pipeline(image_bytes, img_file.filename, patient_id)
+            results.append(_state_to_response(state, img_file.filename))
+        except Exception as e:
+            results.append(DiagnoseResponse(
+                image_name=img_file.filename,
+                quality_check=QualityCheck(passed=False, sharpness_score=0, brightness_score=0),
+                report=f"처리 오류: {e}",
+                success=False, error=str(e),
+            ))
 
-        gradcam_b64 = generate_gradcam_b64(image_bytes, result["class_idx"])
-        top3 = [DiseaseCandidate(**c) for c in result["top3"]]
-        report = build_report(
-            result["disease_ko"], result["disease_en"], result["confidence"],
-            result["top3"], quality["passed"], quality["warning"],
-        )
-        results.append(DiagnoseResponse(
-            patient_id=patient_id, image_name=img_file.filename,
-            quality_check=quality_obj,
-            disease_ko=result["disease_ko"], disease_en=result["disease_en"],
-            confidence=result["confidence"], top3=top3,
-            gradcam_b64=gradcam_b64, report=report, success=True,
-        ))
-
-    success_list = [r for r in results if r.success]
-    diseases_found = list({r.disease_ko for r in success_list})
+    success_list    = [r for r in results if r.success]
+    diseases_found  = list({r.disease_ko for r in success_list if r.disease_ko})
     summary = (
         f"=== 통합 피부 AI 진단 리포트 ===\n"
         f"분석 이미지 수: {len(images)}장 / 성공: {len(success_list)}장\n"
