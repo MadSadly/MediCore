@@ -106,10 +106,66 @@ WHERE module = '[본인module명]'
 
 ---
 
-## AI 서버 엔드포인트 등록
+## AI 서버 로컬 실행 방법
 
-`AI/[이니셜]/router.py` 파일이 이미 만들어져 있습니다.
-`AI/main.py`는 건드리지 말고 본인 `router.py`에 엔드포인트만 추가하면 자동으로 서버에 연결됩니다.
+`AI/main.py`는 6명 라우터를 한 서버에 합치는 구조라, 한 명 코드에 오류가 있으면
+다른 팀원도 서버를 못 띄우는 문제가 있습니다.
+
+**로컬 개발 시 본인 전용 서버를 독립 실행하세요.**
+
+### 1단계 — dev_server.py 만들기
+
+`AI/[이니셜]/dev_server.py` 파일을 아래 내용으로 만드세요:
+
+```python
+from pathlib import Path
+from dotenv import load_dotenv
+load_dotenv(Path(__file__).resolve().parents[2] / ".env")
+
+import uvicorn
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from [이니셜].router import router
+
+app = FastAPI()
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+app.include_router(router)
+
+if __name__ == "__main__":
+    uvicorn.run("[이니셜].dev_server:app", host="0.0.0.0", port=8000, reload=True)
+```
+
+### 2단계 — run_[이니셜].bat 만들기
+
+`run_all.bat`을 복사해서 `run_[이니셜].bat`으로 만들고,
+AI 서버 실행 줄만 아래처럼 변경하세요:
+
+```bat
+:: 변경 전
+uvicorn main:app --reload --port 8000
+
+:: 변경 후
+python -m [이니셜].dev_server
+```
+
+### 3단계 — git 추적 제외
+
+`run_[이니셜].bat`은 커밋하지 않도록 `.git/info/exclude`에 추가하세요:
+
+```
+run_[이니셜].bat
+```
+
+### 실행
+
+```bash
+# run_[이니셜].bat 더블클릭
+# 또는 터미널에서:
+cd D:\workspace\MediCore\AI
+python -m [이니셜].dev_server
+```
+
+> `AI/main.py`와 `run_all.bat`은 절대 수정하지 마세요. 로컬 전용 파일만 사용하세요.
 
 ---
 

@@ -1,9 +1,14 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
 from urllib.parse import urlparse
 
 import psycopg2
+from dotenv import load_dotenv
+
+# 프로젝트 루트 .env 로드 (AI/ 기준 두 단계 위)
+load_dotenv(Path(__file__).resolve().parents[3] / ".env")
 from psycopg2.extras import execute_values
 
 EMBEDDING_DIM = 1024  # 실제 테이블 vector(1024)에 맞춤
