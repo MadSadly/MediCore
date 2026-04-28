@@ -200,12 +200,13 @@ cd backend-main
 ./gradlew bootRun --args='--spring.profiles.active=local'
 ```
 
-**FastAPI:**
+**FastAPI (본인 모듈만 독립 실행):**
 ```bash
 cd AI
 venv\Scripts\activate
-uvicorn main:app --reload --port 8000
+python -m [이니셜].dev_server
 ```
+> ⚠ `uvicorn main:app` 대신 본인 `dev_server.py`로 실행. 만드는 방법은 `CLAUDE.md` 참고.
 
 **React:**
 ```bash
