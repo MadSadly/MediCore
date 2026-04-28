@@ -201,12 +201,15 @@ cd C:\Users\본인이름\Desktop\MediCore\frontend
 npm run dev
 ```
 
-**창 4 - AI 서버**
+**창 4 - AI 서버 (본인 모듈만 독립 실행)**
 ```cmd
 cd C:\Users\본인이름\Desktop\MediCore\AI
 venv\Scripts\activate
-uvicorn main:app --reload --port 8000
+python -m [이니셜].dev_server
 ```
+
+> ⚠ `uvicorn main:app` 대신 반드시 본인 `dev_server.py`로 실행하세요.
+> 만드는 방법은 `CLAUDE.md` 참고.
 
 브라우저: `http://localhost:5173`
 

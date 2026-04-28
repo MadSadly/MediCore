@@ -19,6 +19,9 @@ AI/*.pyc
 AI/venv/
 AI/**/__pycache__/
 
+# 테스트용 합성 NIfTI 데이터 (로컬 생성, 커밋 불필요)
+AI/WJ/tests/test_data/
+
 # GCP 서비스 계정 키 (절대 올리면 안됨)
 secrets/
 
@@ -29,6 +32,8 @@ Thumbs.db
 # IDE
 .vscode/
 .idea/
+
+0_projectPrompt/
 
 # exe
 MS_run_all.bat
