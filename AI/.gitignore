@@ -22,3 +22,6 @@ __pycache__/
 # 업로드된 이미지/파일
 uploads/
 temp/
+
+
+*.joblib
