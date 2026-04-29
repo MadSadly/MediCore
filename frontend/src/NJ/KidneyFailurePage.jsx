@@ -29,12 +29,32 @@ const RECOMMENDATIONS = {
 }
 
 const FIELDS = [
-  { key: 'sc',   label: '크레아티닌', unit: 'mg/dL',  normal: '0.7~1.2', min: 0.7, max: 1.2,  placeholder: '예: 4.20' },
-  { key: 'egfr', label: 'GFR',       unit: 'mL/min', normal: '≥ 90',    min: 90,  max: 9999, placeholder: '예: 18.0' },
-  { key: 'bu',   label: 'BUN',       unit: 'mg/dL',  normal: '7~20',    min: 7,   max: 20,   placeholder: '예: 45.0' },
-  { key: 'pot',  label: '칼륨',      unit: 'mEq/L',  normal: '3.5~5.0', min: 3.5, max: 5.0,  placeholder: '예: 5.80' },
-  { key: 'al',   label: '알부민',    unit: 'g/dL',   normal: '3.5~5.0', min: 3.5, max: 5.0,  placeholder: '예: 3.8'  },
+  { key: 'sc',   label: '크레아티닌',  unit: 'mg/dL',  normal: '0.7~1.2', min: 0.7, max: 1.2,  placeholder: '예: 4.20', tag: 'Core'   },
+  { key: 'bu',   label: 'BUN',        unit: 'mg/dL',  normal: '7~20',    min: 7,   max: 20,   placeholder: '예: 45.0', tag: 'Alert'  },
+  { key: 'pot',  label: '칼륨',       unit: 'mEq/L',  normal: '3.5~5.0', min: 3.5, max: 5.0,  placeholder: '예: 5.80', tag: 'Alert'  },
+  { key: 'al',   label: '알부민',     unit: 'g/dL',   normal: '3.5~5.0', min: 3.5, max: 5.0,  placeholder: '예: 3.8',  tag: 'Core'   },
+  { key: 'bp',   label: '혈압',       unit: 'mmHg',   normal: '< 130',   min: 0,   max: 130,  placeholder: '예: 140',  tag: 'Core'   },
+  { key: 'bgr',  label: '혈당',       unit: 'mg/dL',  normal: '70~140',  min: 70,  max: 140,  placeholder: '예: 180',  tag: 'Core'   },
+  { key: 'hemo', label: '헤모글로빈', unit: 'g/dL',   normal: '12~17',   min: 12,  max: 17,   placeholder: '예: 10.5', tag: 'Comp'   },
 ]
+
+// CKD-EPI 2021 (race-free) eGFR 자동 계산
+function calcEgfr(sc, age, sex) {
+  const scr = parseFloat(sc)
+  const a   = parseFloat(age)
+  if (isNaN(scr) || isNaN(a) || scr <= 0 || a <= 0) return null
+  const isFemale = sex === 'F'
+  const kappa  = isFemale ? 0.7    : 0.9
+  const alpha  = isFemale ? -0.241 : -0.302
+  const sexFac = isFemale ? 1.012  : 1.0
+  const ratio  = scr / kappa
+  const egfr   = 142
+    * Math.pow(Math.min(ratio, 1), alpha)
+    * Math.pow(Math.max(ratio, 1), -1.200)
+    * Math.pow(0.9938, a)
+    * sexFac
+  return Math.round(egfr * 10) / 10
+}
 
 function getGfrStage(gfr) {
   const v = parseFloat(gfr)
@@ -101,13 +121,14 @@ export default function KidneyFailurePage() {
   const { id: patientId } = useParams()
 
   const [screen, setScreen]   = useState('input')
-  const [form, setForm]       = useState({ sc: '', egfr: '', bu: '', pot: '', al: '', htn: false, dm: false, pe: false, query: '' })
+  const [form, setForm]       = useState({ sc: '', bu: '', pot: '', al: '', bp: '', bgr: '', hemo: '', age: '', sex: 'M', htn: false, dm: false, pe: false, query: '' })
   const [result, setResult]   = useState(null)
   const [error, setError]     = useState(null)
   const [saving, setSaving]   = useState(false)
   const [saved, setSaved]     = useState(false)
 
-  const previewStage = getGfrStage(form.egfr)
+  const computedEgfr = calcEgfr(form.sc, form.age, form.sex)
+  const previewStage = getGfrStage(computedEgfr)
 
   const handleSubmit = async () => {
     setError(null)
@@ -115,10 +136,14 @@ export default function KidneyFailurePage() {
     try {
       const { data } = await axios.post(`${AI_URL}/ai/kidney/diagnose`, {
         sc:    form.sc   ? parseFloat(form.sc)   : null,
-        egfr:  form.egfr ? parseFloat(form.egfr) : null,
+        egfr:  computedEgfr,
+        age:   form.age  ? parseFloat(form.age)  : null,
         bu:    form.bu   ? parseFloat(form.bu)   : null,
         pot:   form.pot  ? parseFloat(form.pot)  : null,
         al:    form.al   ? parseFloat(form.al)   : null,
+        bp:    form.bp   ? parseFloat(form.bp)   : null,
+        bgr:   form.bgr  ? parseFloat(form.bgr)  : null,
+        hemo:  form.hemo ? parseFloat(form.hemo) : null,
         htn:   form.htn  ? 'yes' : 'no',
         dm:    form.dm   ? 'yes' : 'no',
         pe:    form.pe   ? 'yes' : 'no',
@@ -135,6 +160,7 @@ export default function KidneyFailurePage() {
   const handleSave = async () => {
     if (!result || saving || saved) return
     setSaving(true)
+    const token = localStorage.getItem('token')
     try {
       await axios.post(`/api/patients/${patientId}/diagnoses/kidney`, {
         result:           result.prediction,
@@ -143,7 +169,7 @@ export default function KidneyFailurePage() {
         severity:         result.severity,
         dialysisRequired: result.dialysis_required,
         probabilities:    result.probabilities,
-      })
+      }, { headers: { Authorization: `Bearer ${token}` } })
       setSaved(true)
     } catch {
       /* 저장 실패는 조용히 처리 */
@@ -176,16 +202,77 @@ export default function KidneyFailurePage() {
           {/* 왼쪽 2/3 */}
           <div className="col-span-2 space-y-5">
 
+            {/* 환자 기본 정보 + eGFR 자동 계산 */}
+            <div className="bg-[#151921] border border-slate-800 rounded-2xl p-6">
+              <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-5">환자 기본 정보 (eGFR 자동 계산)</p>
+              <div className="grid grid-cols-3 gap-4 items-end">
+                {/* 나이 */}
+                <div>
+                  <label className="text-xs font-semibold text-slate-300 block mb-1.5">나이</label>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      value={form.age}
+                      placeholder="예: 65"
+                      onChange={e => setForm(p => ({ ...p, age: e.target.value }))}
+                      className="w-full bg-[#0d1117] border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-blue-500 transition-colors pr-10"
+                    />
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-slate-500">세</span>
+                  </div>
+                </div>
+                {/* 성별 */}
+                <div>
+                  <label className="text-xs font-semibold text-slate-300 block mb-1.5">성별</label>
+                  <div className="flex gap-2">
+                    {[['M', '남성'], ['F', '여성']].map(([val, label]) => (
+                      <button
+                        key={val}
+                        type="button"
+                        onClick={() => setForm(p => ({ ...p, sex: val }))}
+                        className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition-all border ${
+                          form.sex === val
+                            ? 'bg-blue-600/20 border-blue-500/50 text-blue-300'
+                            : 'bg-[#0d1117] border-slate-700 text-slate-500 hover:border-slate-600'
+                        }`}
+                      >{label}</button>
+                    ))}
+                  </div>
+                </div>
+                {/* 자동 계산된 eGFR */}
+                <div>
+                  <div className="flex items-center gap-2 mb-1.5">
+                    <label className="text-xs font-semibold text-slate-300">eGFR</label>
+                    <span className="text-[9px] px-1.5 py-0.5 rounded font-bold text-emerald-400 bg-emerald-500/10">자동계산</span>
+                  </div>
+                  <div className={`w-full border rounded-xl px-4 py-2.5 flex items-center justify-between ${
+                    computedEgfr !== null ? 'bg-emerald-500/5 border-emerald-500/30' : 'bg-[#0d1117] border-slate-700'
+                  }`}>
+                    <span className={`text-sm font-bold ${computedEgfr !== null ? 'text-emerald-400' : 'text-slate-600'}`}>
+                      {computedEgfr !== null ? computedEgfr : '—'}
+                    </span>
+                    <span className="text-[10px] text-slate-500">mL/min</span>
+                  </div>
+                  {computedEgfr !== null && (
+                    <p className="text-[9px] text-slate-600 mt-1">CKD-EPI 2021 공식 적용</p>
+                  )}
+                </div>
+              </div>
+            </div>
+
             {/* 신장 기능 수치 */}
             <div className="bg-[#151921] border border-slate-800 rounded-2xl p-6">
               <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-5">신장 기능 수치</p>
               <div className="grid grid-cols-2 gap-4">
                 {FIELDS.map(f => {
                   const warn = form[f.key] !== '' && isOutOfRange(form[f.key], f.min, f.max)
+                  const tagColor = f.tag === 'Core' ? 'text-blue-400 bg-blue-500/10' : f.tag === 'Alert' ? 'text-red-400 bg-red-500/10' : 'text-slate-400 bg-slate-700/50'
                   return (
-                    <div key={f.key} className={f.key === 'al' ? 'col-span-2' : ''}>
+                    <div key={f.key}>
                       <div className="flex justify-between items-center mb-1.5">
-                        <label className="text-xs font-semibold text-slate-300">{f.label}</label>
+                        <div className="flex items-center gap-2">
+                          <label className="text-xs font-semibold text-slate-300">{f.label}</label>
+                          <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold ${tagColor}`}>{f.tag}</span>
+                        </div>
                         <span className="text-[10px] text-slate-500">정상 {f.normal} {f.unit}</span>
                       </div>
                       <div className="relative">
@@ -253,7 +340,7 @@ export default function KidneyFailurePage() {
               ? <CKDStepList activeKey={previewStage} />
               : (
                 <div className="text-center py-8">
-                  <p className="text-slate-600 text-xs">GFR 값을 입력하면<br />단계를 미리 확인할 수 있습니다</p>
+                  <p className="text-slate-600 text-xs">크레아티닌 + 나이/성별 입력 시<br />eGFR이 자동 계산되어<br />단계를 미리 확인할 수 있습니다</p>
                 </div>
               )
             }
@@ -352,6 +439,28 @@ export default function KidneyFailurePage() {
             </div>
           </div>
 
+
+          {/* 위험 알림 */}
+          {result.alerts && result.alerts.length > 0 && (
+            <div className="space-y-2">
+              {result.alerts.map((alert, i) => (
+                <div
+                  key={i}
+                  className={`flex items-start gap-3 rounded-xl px-4 py-3 border text-sm font-medium ${
+                    alert.level === 'critical'
+                      ? 'bg-red-500/10 border-red-500/30 text-red-300'
+                      : 'bg-yellow-500/10 border-yellow-500/30 text-yellow-300'
+                  }`}
+                >
+                  <span className="mt-0.5 shrink-0 text-base">
+                    {alert.level === 'critical' ? '🚨' : '⚠️'}
+                  </span>
+                  <span>{alert.message}</span>
+                </div>
+              ))}
+            </div>
+          )}
+
           <div className="grid grid-cols-3 gap-5">
             {/* 왼쪽 2/3 */}
             <div className="col-span-2 space-y-5">
@@ -359,7 +468,15 @@ export default function KidneyFailurePage() {
               {/* 입력 수치 요약 */}
               <div className="bg-[#151921] border border-slate-800 rounded-2xl p-5">
                 <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-4">입력 수치 요약</p>
-                <div className="grid grid-cols-5 gap-3">
+                <div className="grid grid-cols-4 gap-3">
+                  {/* 자동 계산된 eGFR */}
+                  {computedEgfr !== null && (
+                    <div className="border rounded-xl p-3 text-center bg-emerald-500/5 border-emerald-500/20">
+                      <p className="text-[9px] text-slate-500 mb-1">GFR <span className="text-emerald-500/70">자동</span></p>
+                      <p className="text-base font-bold text-emerald-400">{computedEgfr}</p>
+                      <p className="text-[9px] text-slate-600">mL/min</p>
+                    </div>
+                  )}
                   {FIELDS.map(f => {
                     if (!form[f.key]) return null
                     const out = isOutOfRange(form[f.key], f.min, f.max)
