@@ -1,5 +1,5 @@
 """
-AI/SH/quality_check.py
+AI/SH/core/quality_check.py
 안과 CDSS — 이미지 품질 검증 (OPH-05)
 철칙 16: Laplacian 필터 최전방 배치 (OOD 차단)
 
@@ -20,7 +20,7 @@ import cv2
 import numpy as np
 from typing import Tuple, Optional
 
-from .schemas import ImageQualityResult, ErrorCode
+from ..schemas.response import ImageQualityResult, ErrorCode
 
 
 # ── 임계값 설정 ───────────────────────────────────────────────

@@ -18,8 +18,15 @@ opencv-python-headless>=4.9.0
 numpy>=1.26.0
 Pillow>=10.2.0
 
-# DB (pgvector)
+# DB (pgvector + Hybrid 검색 동기 연결)
 asyncpg>=0.29.0
+psycopg2-binary>=2.9.9
+
+# RAG (Hybrid: BGE-M3 + BM25)
+FlagEmbedding>=1.2.10
+networkx>=3.2
+google-generativeai>=0.8.0
+pymupdf>=1.24.0  # rag/chunk_and_embed.py PDF 텍스트 추출 (import fitz)
 
 # Google Cloud (소견서 생성)
 google-cloud-aiplatform>=1.43.0

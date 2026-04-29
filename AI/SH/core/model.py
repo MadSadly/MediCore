@@ -1,5 +1,5 @@
 """
-AI/SH/model.py
+AI/SH/core/model.py
 안과 CDSS — ONNX 추론 엔진
 철칙 17: Temperature Scaling (확률 보정)
 철칙 18: TTA Horizontal Flip (환경별 ON/OFF)
@@ -17,7 +17,7 @@ from typing import List, Tuple, Dict
 import cv2
 import onnxruntime as ort
 
-from .schemas import (
+from ..schemas.response import (
     DiseaseClass, DISEASE_NAMES, STAGE_NAMES,
     DiseaseScore, StageResult, DLResult, EmergencyAlert,
 )
@@ -36,7 +36,7 @@ class ModelLoadError(Exception):
 
 
 # ── 경로 설정 ─────────────────────────────────────────────────
-WEIGHTS_DIR = Path(__file__).parent / "weights"
+WEIGHTS_DIR = Path(__file__).resolve().parent.parent / "weights"
 
 ONNX_PATH       = WEIGHTS_DIR / "swin_base_final.onnx"
 THRESHOLD_PATH  = WEIGHTS_DIR / "threshold_config.json"

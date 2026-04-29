@@ -14,24 +14,26 @@ OPH-16: GradCAM 히트맵
 담당: 홍승현 (SH)
 """
 
-import time
 import json
 import asyncio
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
-from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Depends
+from fastapi import APIRouter, UploadFile, File, Form, Depends
 from fastapi.responses import StreamingResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
-from .schemas import (
-    AnalysisRequest, AnalysisResponse, DLResult,
-    EmergencyAlert, ErrorResponse, ErrorCode,
-    ReportChunk, CitationSource,
+from .schemas.request import AnalysisRequest
+from .schemas.response import (
+    EmergencyAlert, ErrorCode,
+    CitationSource,
 )
-from .quality_check import check_image_quality
-from .model import eye_model, OODInferenceError, ModelLoadError
-from .gradcam import gradcam_engine
+from .core.quality_check import check_image_quality
+from .core.model import eye_model, OODInferenceError
+from .core.gradcam import gradcam_engine
+from .rag.retriever import hybrid_retriever
+from .rag.graph_rag import graph_builder, graph_retriever
+from .llm.report_generator import generate_report_stream
 
 
 # ── 보안 ─────────────────────────────────────────────────────
@@ -49,6 +51,11 @@ async def lifespan(app):
         print("✅ EyeModel 워밍업 완료")
     except Exception as e:
         print(f"⚠️ EyeModel 워밍업 실패: {e}")
+    try:
+        hybrid_retriever.load()
+        print("✅ HybridRetriever (BGE-M3) 워밍업 완료")
+    except Exception as e:
+        print(f"⚠️ HybridRetriever 워밍업 실패: {e}")
     yield
 
 
@@ -204,14 +211,25 @@ async def _analysis_stream(
     # ── Step 6: 소견서 스트리밍 (OPH-10) ─────────────────────
     yield _sse_event("report_generating", {"session_id": session_id})
 
-    async for chunk in _generate_report_stream(
-        dl_result=dl_result,
-        emergency=emergency,
-        citations=citations,
-        clinical_note=request.clinical_note,
-        session_id=session_id,
-    ):
-        yield chunk
+    try:
+        async for text in generate_report_stream(
+            dl_result=dl_result,
+            emergency=emergency,
+            citations=citations,
+            clinical_note=request.clinical_note,
+        ):
+            yield _sse_event("report_chunk", {
+                "session_id": session_id,
+                "data":       text,
+            })
+            await asyncio.sleep(0)
+    except Exception as e:
+        print(f"⚠️ 소견서 생성 실패: {e}")
+        yield _sse_event("error", {
+            "error_code": ErrorCode.LLM_GENERATION_FAILED,
+            "message":    "소견서 생성에 실패했습니다.",
+            "session_id": session_id,
+        })
 
     # ── Step 7: 완료 ─────────────────────────────────────────
     yield _sse_event("done", {
@@ -228,115 +246,40 @@ async def _retrieve_rag(
     stage:        int,
 ) -> list[CitationSource]:
     """
-    pgvector에서 대한안과학회 임상진료지침 검색
-    module='eyes' 필터 필수 (CLAUDE.md 규칙)
+    Hybrid RAG (Dense + BM25 → RRF) 및 Graph 기반 재정렬.
+    pgvector `module_tag = 'eyes'` 필터 필수 (CLAUDE.md 규칙).
     """
-    try:
-        import asyncpg
-        import os
-        import numpy as np
 
-        conn = await asyncpg.connect(os.getenv("DATABASE_URL"))
-
-        # 검색 쿼리 임베딩 생성 (간단히 질환명 사용)
-        query = f"{disease_name} Stage {stage} 치료 가이드라인"
-
-        # pgvector 검색 (module='eyes' 필터)
-        rows = await conn.fetch("""
-            SELECT title, content, source, page
-            FROM medical_knowledge
-            WHERE module = 'eyes'
-            ORDER BY embedding <=> $1::vector
-            LIMIT 3
-        """, query)
-
-        await conn.close()
-
-        return [
-            CitationSource(
-                title=row["title"],
-                content=row["content"][:500],
-                source=row["source"],
-                page=row["page"],
+    def _sync() -> list[CitationSource]:
+        assert graph_builder.module_tag == "eyes"
+        q = f"{disease_name} Stage {stage} 치료 가이드라인"
+        rows = hybrid_retriever.search(
+            query=q,
+            disease_name=disease_name,
+            stage=stage,
+        )
+        rows = graph_retriever.refine(
+            rows,
+            disease_name=disease_name,
+            stage=stage,
+        )
+        out: list[CitationSource] = []
+        for r in rows:
+            out.append(
+                CitationSource(
+                    title=r.get("title") or disease_name,
+                    content=(r.get("content") or "")[:500],
+                    source=r.get("source") or "AAO PPP",
+                    page=r.get("page"),
+                )
             )
-            for row in rows
-        ]
+        return out
 
+    try:
+        return await asyncio.get_event_loop().run_in_executor(None, _sync)
     except Exception as e:
         print(f"⚠️ RAG 검색 실패: {e}")
         return []
-
-
-# ── Gemini 소견서 스트리밍 ────────────────────────────────────
-
-async def _generate_report_stream(
-    dl_result:    DLResult,
-    emergency:    EmergencyAlert,
-    citations:    list[CitationSource],
-    clinical_note: str | None,
-    session_id:   str,
-) -> AsyncGenerator[str, None]:
-    """
-    Google Vertex AI Gemini 소견서 생성 (스트리밍)
-    """
-    try:
-        import vertexai
-        from vertexai.generative_models import GenerativeModel
-        import os
-
-        vertexai.init(
-            project=os.getenv("GOOGLE_CLOUD_PROJECT"),
-            location=os.getenv("GOOGLE_CLOUD_REGION", "asia-northeast3"),
-        )
-
-        model = GenerativeModel("gemini-1.5-pro")
-
-        # 프롬프트 구성
-        citation_text = "\n".join([
-            f"- {c.title}: {c.content[:200]}"
-            for c in citations
-        ])
-
-        prompt = f"""
-당신은 대한안과학회 임상진료지침을 기반으로 소견서를 작성하는 AI입니다.
-반드시 제공된 근거 문헌에 기반하여 작성하고, 출처를 명시하세요.
-
-[AI 진단 결과]
-- 주요 질환: {dl_result.primary_disease.disease_name}
-- 확신도: {dl_result.primary_disease.confidence:.1%}
-- 중증도: {dl_result.stage.stage_name if dl_result.stage else '미분류'}
-- 응급 여부: {'응급' if emergency.is_emergency else '비응급'}
-
-[의사 소견]
-{clinical_note or '없음'}
-
-[근거 문헌]
-{citation_text or '검색된 문헌 없음'}
-
-위 정보를 바탕으로 간결한 임상 소견서를 작성하세요.
-        """.strip()
-
-        # 스트리밍 생성
-        response = await asyncio.get_event_loop().run_in_executor(
-            None,
-            lambda: model.generate_content(prompt, stream=True)
-        )
-
-        for chunk in response:
-            if chunk.text:
-                yield _sse_event("report_chunk", {
-                    "session_id": session_id,
-                    "data":       chunk.text,
-                })
-                await asyncio.sleep(0)  # 이벤트 루프 양보
-
-    except Exception as e:
-        print(f"⚠️ 소견서 생성 실패: {e}")
-        yield _sse_event("error", {
-            "error_code": ErrorCode.LLM_GENERATION_FAILED,
-            "message":    "소견서 생성에 실패했습니다.",
-            "session_id": session_id,
-        })
 
 
 # ── 진단 이력 조회 (OPH-15) ──────────────────────────────────
