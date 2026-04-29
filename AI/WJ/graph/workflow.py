@@ -65,12 +65,12 @@ def get_workflow():
     return _workflow
 
 
-def run_diagnosis(nifti_path: str, skull_strip: bool = False) -> DiagnoseResponse:
+def run_diagnosis(nifti_path: str) -> DiagnoseResponse:
     """
     엔드포인트에서 호출하는 진입점.
 
     Args:
-        nifti_path: 업로드된 NIfTI 파일 경로
+        nifti_path: 업로드된 NIfTI 파일 경로 (skull strip은 사전에 완료된 파일)
 
     Returns:
         DiagnoseResponse
@@ -82,7 +82,6 @@ def run_diagnosis(nifti_path: str, skull_strip: bool = False) -> DiagnoseRespons
 
     initial_state: DiagnosisState = {
         "nifti_path": nifti_path,
-        "skull_strip": skull_strip,
         "tensor": None,
         "classification": None,
         "safety": None,

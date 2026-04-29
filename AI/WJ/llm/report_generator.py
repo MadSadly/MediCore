@@ -87,7 +87,7 @@ def generate_report(
         rag_context=_build_rag_context(references),
     )
 
-    raw = generate_text(prompt, temperature=0.2, max_tokens=1024)
+    raw = generate_text(prompt, temperature=0.2, max_tokens=8192)
 
     try:
         data = _parse_report_json(raw)
