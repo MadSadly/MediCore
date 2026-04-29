@@ -8,10 +8,23 @@ from WJ.schemas.response import RetrievedDocument
 _embedding_model = None
 
 
+def _init_vertexai() -> None:
+    import vertexai
+    project = os.getenv("GCP_PROJECT_ID")
+    location = os.getenv("GCP_LOCATION", "asia-northeast3")
+    key_path = os.getenv("GCP_KEY_PATH")
+    if not project:
+        raise RuntimeError("GCP_PROJECT_ID 환경변수가 설정되지 않았습니다.")
+    if key_path:
+        os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = key_path
+    vertexai.init(project=project, location=location)
+
+
 def _get_embedding_model():
     """Vertex AI 임베딩 모델 싱글톤."""
     global _embedding_model
     if _embedding_model is None:
+        _init_vertexai()
         from vertexai.language_models import TextEmbeddingModel
         _embedding_model = TextEmbeddingModel.from_pretrained("gemini-embedding-001")
     return _embedding_model

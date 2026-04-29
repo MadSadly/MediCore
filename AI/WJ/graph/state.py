@@ -7,9 +7,8 @@ from WJ.schemas.response import DiagnoseResponse, MedicalReport, RetrievedDocume
 
 
 class DiagnosisState(TypedDict):
-    # 입력
+    # 입력 (skull strip은 사전 처리된 파일을 전달)
     nifti_path: str
-    skull_strip: bool  # True면 HD-BET 먼저 수행
 
     # 전처리 결과 (torch.Tensor — in-memory only, 체크포인트 미사용)
     tensor: Optional[Any]

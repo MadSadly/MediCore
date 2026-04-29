@@ -17,29 +17,22 @@ def get_gemini_model():
 
     project = os.getenv("GCP_PROJECT_ID")
     location = os.getenv("GCP_LOCATION", "asia-northeast3")
+    key_path = os.getenv("GCP_KEY_PATH")
 
     if not project:
         raise RuntimeError("GCP_PROJECT_ID 환경변수가 설정되지 않았습니다.")
 
+    if key_path:
+        os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = key_path
+
     vertexai.init(project=project, location=location)
 
-    model_name = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+    model_name = os.getenv("GEMINI_MODEL", "gemini-2.0-flash-001")
     _gemini_model = GenerativeModel(model_name)
     return _gemini_model
 
 
-def generate_text(prompt: str, temperature: float = 0.3, max_tokens: int = 2048) -> str:
-    """
-    Gemini로 텍스트 생성.
-
-    Args:
-        prompt: 입력 프롬프트
-        temperature: 생성 온도 (의료 리포트는 낮게 유지)
-        max_tokens: 최대 출력 토큰 수
-
-    Returns:
-        생성된 텍스트
-    """
+def generate_text(prompt: str, temperature: float = 0.3, max_tokens: int = 8192) -> str:
     from vertexai.generative_models import GenerationConfig
 
     model = get_gemini_model()
