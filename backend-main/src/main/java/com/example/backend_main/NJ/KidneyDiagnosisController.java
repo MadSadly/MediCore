@@ -3,8 +3,6 @@ package com.example.backend_main.NJ;
 import com.example.backend_main.NJ.dto.KidneyDiagnosisRequest;
 import com.example.backend_main.diagnosis.Diagnosis;
 import com.example.backend_main.diagnosis.DiagnosisRepository;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -17,16 +15,18 @@ import org.springframework.web.bind.annotation.*;
 public class KidneyDiagnosisController {
 
     private final DiagnosisRepository diagnosisRepository;
-    private final ObjectMapper objectMapper;
 
     @PostMapping
     public ResponseEntity<Diagnosis> create(
             @PathVariable String patientUid,
             @RequestBody KidneyDiagnosisRequest req,
             Authentication auth
-    ) throws JsonProcessingException {
-
-        String resultJson = objectMapper.writeValueAsString(req);
+    ) {
+        String resultJson = String.format(
+            "{\"result\":\"%s\",\"confidence\":%.4f,\"description\":\"%s\",\"severity\":\"%s\",\"dialysisRequired\":%b}",
+            req.getResult(), req.getConfidence(), req.getDescription(),
+            req.getSeverity(), req.isDialysisRequired()
+        );
 
         Diagnosis diagnosis = Diagnosis.builder()
                 .patientUid(patientUid)
