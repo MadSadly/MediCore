@@ -15,13 +15,14 @@ main      ── 최종 완성본. 직접 push 금지
   └── feature/colon        ← 대장암 담당
 ```
 
-**규칙:** 각자 본인 `feature/모듈명` 브랜치에서만 작업. `main`에 직접 push 금지. 
--> 일단 접속을한다음에 git branch 명령어를 cmd에 입력하면 
-D:\workspace\MediCore>git branch
-* feature/brain
-  main
+**규칙:** 각자 본인 `feature/모듈명` 브랜치에서만 작업. `main`에 직접 push 금지.
+**로컬에는 feature 브랜치 하나만 사용합니다. 로컬 main 브랜치는 만들지 않아도 됩니다.**
 
-이런식으로 출력이 되는데 * 옆에있는게 현재 자기가 사용중인 브랜치
+`git branch` 입력 시 아래처럼 나오면 정상:
+```
+* feature/brain
+```
+`*` 옆에 있는 게 현재 사용 중인 브랜치.
 
 **PR:** `feature/모듈명` → `main` 으로 Pull Request 생성.  
 **CI:** PR 생성 또는 main push 시 자동으로 테스트 실행.
@@ -42,13 +43,12 @@ git push -u origin feature/본인모듈명
 ## 매일 작업 시작할 때
 
 ```cmd
-git checkout main
 git pull origin main
-git checkout feature/본인모듈명
-git merge main
 ```
 
-> 다른 팀원이 올린 최신 코드를 내 브랜치에 반영하는 과정.
+> feature 브랜치에 있는 상태에서 바로 실행.
+> origin/main의 최신 코드가 내 브랜치에 바로 반영됨.
+> 로컬 main 브랜치로 이동할 필요 없음.
 
 ---
 
@@ -83,14 +83,11 @@ git push origin feature/brain
 |--------|---------|
 | `git status` | 현재 변경사항 확인 |
 | `git branch` | 브랜치 목록 |
-| `git checkout 브랜치명` | 브랜치 이동 |
-| `git checkout -b 브랜치명` | 브랜치 새로 만들고 이동 |
-| `git pull origin 브랜치명` | GitHub에서 최신 코드 받기 |
+| `git pull origin main` | origin/main 최신 코드를 내 브랜치에 반영 |
 | `git push origin 브랜치명` | GitHub에 올리기 |
 | `git add 파일` | 커밋할 파일 선택 |
 | `git commit -m "메시지"` | 저장 |
 | `git log --oneline` | 커밋 히스토리 보기 |
-| `git merge 브랜치명` | 브랜치 합치기 |
 
 ---
 
@@ -119,9 +116,9 @@ git commit -m "충돌 해결"
 ## 하루 흐름 요약
 
 ```
-작업 시작
-  → git pull로 최신화 (main 기준)
+작업 시작 (feature/본인모듈 브랜치에서)
+  → git pull origin main  ← 한 줄로 최신화 끝
   → 코드 작업
-  → git add → git commit → git push
+  → git add → git commit → git push origin feature/본인모듈명
   → 완료되면 GitHub에서 PR 생성 (feature → main)
 ```

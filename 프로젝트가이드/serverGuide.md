@@ -4,7 +4,7 @@
 
 ## 프로젝트에서 사용하는 서버
 
-총 7개의 서버(컨테이너)로 구성됨.
+총 10개의 서버(컨테이너)로 구성됨.
 
 | 서버 | 역할 |
 |------|------|
@@ -90,33 +90,14 @@ Spring Boot가 요청을 받으면 해당 AI 서버의 IP로 직접 HTTP 요청�
 
 ---
 
-## 각자 PC에서 개발하는 방법
+## 로컬 개발 방법
 
-### 개발 중에는 Docker Compose로 전체 실행
+DB + Redis만 Docker로 올리고 나머지는 직접 실행. 저장하면 바로 반영됨.
+`run_[이니셜].bat` 더블클릭하면 아래 과정이 자동으로 실행됨. (만드는 방법은 `CLAUDE.md` 참고)
 
-본인 PC 한 대에서 전부 띄워서 테스트.
-
+**창 1 - DB + Redis**
 ```cmd
-cd MediCore
-docker compose up -d
-```
-
-브라우저에서 `http://localhost:3000` 접속해서 확인.
-
-코드 수정 후 재실행:
-```cmd
-docker compose up --build -d
-```
-
----
-
-### 빠르게 개발할 때 (코드 수정이 잦을 때)
-
-DB만 Docker로 올리고 나머지는 직접 실행. 저장하면 바로 반영됨.
-
-**창 1 - DB**
-```cmd
-docker compose up db -d
+docker compose up postgres redis -d
 ```
 
 **창 2 - Spring Boot**
@@ -131,20 +112,60 @@ cd frontend
 npm run dev
 ```
 
-**창 4 - AI 서버**
+**창 4 - AI 서버 (본인 모듈만 독립 실행)**
 ```cmd
 cd AI
-uvicorn main:app --reload --port 8000
+python -m [이니셜].dev_server
 ```
+
+> ⚠ `uvicorn main:app`으로 실행하면 한 명 코드 오류 시 전체가 서버가 안 뜹니다.
+> 반드시 본인 `AI/[이니셜]/dev_server.py`로 실행하세요.
 
 ---
 
-### 코드 관리 (Git)
+## 시연 배포 방법 (최종)
 
-각자 본인 브랜치에서 작업 후 develop으로 PR.
+시연 당일 PC 7대를 아래와 같이 구성합니다.
+
+### Master PC 1대 (React + Spring + DB + Redis)
+
+```cmd
+cd MediCore
+docker compose up postgres redis -d
+cd backend-main && gradlew.bat bootRun
+cd frontend && npm run dev
+```
+
+### Worker PC 6대 (각자 AI 서버)
+
+각자 본인 폴더의 `Dockerfile`로 빌드 후 실행합니다.
+
+```cmd
+cd D:\workspace\MediCore\AI
+
+:: 빌드
+docker build -f [이니셜]/Dockerfile -t medicore-[이니셜] .
+
+:: 실행
+docker run -p 8000:8000 --env-file ../.env medicore-[이니셜]
+```
+
+예) WJ:
+```cmd
+docker build -f WJ/Dockerfile -t medicore-wj .
+docker run -p 8000:8000 --env-file ../.env medicore-wj
+```
+
+> 각자 `AI/[이니셜]/Dockerfile`이 있어야 합니다. 없으면 `CLAUDE.md` 참고해서 만드세요.
+
+---
+
+## 코드 관리 (Git)
+
+각자 본인 브랜치에서 작업 후 main으로 PR.
 
 ```
-feature/본인모듈  →  develop  →  main
+feature/본인모듈  →  main
 ```
 
 자세한 내용은 `githubGuide.md` 참고.

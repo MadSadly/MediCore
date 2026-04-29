@@ -48,7 +48,7 @@
 │  피부 진단     │ │  뇌종양 진단  │ │  안과 진단   │
 │  :192.168.0.20 │ │:192.168.0.9  │ │:192.168.0.32 │
 │  FastAPI :8000 │ │FastAPI :8000 │ │FastAPI :8000 │
-│  BGE-M3+Gemini │ │BGE-M3+Gemini │ │BGE-M3+Gemini │
+│  gemini-embedding-001+Gemini │ │gemini-embedding-001+Gemini │ │gemini-embedding-001+Gemini │
 └────────────────┘ └──────────────┘ └──────────────┘
           │                │                │
 ┌─────────▼──────┐ ┌───────▼──────┐ ┌──────▼───────┐
@@ -56,7 +56,7 @@
 │  척추 진단     │ │  신장 진단   │ │  대장암 진단  │
 │  :192.168.0.13 │ │:192.168.0.5  │ │:192.168.0.73 │
 │  FastAPI :8000 │ │FastAPI :8000 │ │FastAPI :8000 │
-│  BGE-M3+Gemini │ │BGE-M3+Gemini │ │BGE-M3+Gemini │
+│  gemini-embedding-001+Gemini │ │gemini-embedding-001+Gemini │ │gemini-embedding-001+Gemini │
 └────────────────┘ └──────────────┘ └──────────────┘
 ```
 
@@ -66,7 +66,7 @@
                                   ↓
                          AI 모델 추론 (PyTorch / YOLO)
                                   ↓
-                      RAG 검색 (BGE-M3 → pgvector)
+                      RAG 검색 (gemini-embedding-001 768차원 → pgvector)
                                   ↓
                       LLM 소견서 생성 (Ollama GGUF)
                                   ↓
@@ -83,7 +83,7 @@
 | **Backend** | Spring Boot + JPA + Spring Security | Java 17 |
 | **AI Server** | FastAPI + PyTorch + YOLOv8 | Python 3.10+ |
 | **LLM** | Google Vertex AI Gemini 1.5 Flash/Pro | - |
-| **RAG 임베딩** | BGE-M3 (FlagEmbedding) | - |
+| **RAG 임베딩** | Google gemini-embedding-001 (768차원) | - |
 | **DB** | PostgreSQL 16 + pgvector | - |
 | **Cache** | Redis 7 | - |
 | **DevOps** | Docker, GitHub Actions | - |
@@ -200,12 +200,13 @@ cd backend-main
 ./gradlew bootRun --args='--spring.profiles.active=local'
 ```
 
-**FastAPI:**
+**FastAPI (본인 모듈만 독립 실행):**
 ```bash
 cd AI
 venv\Scripts\activate
-uvicorn main:app --reload --port 8000
+python -m [이니셜].dev_server
 ```
+> ⚠ `uvicorn main:app` 대신 본인 `dev_server.py`로 실행. 만드는 방법은 `CLAUDE.md` 참고.
 
 **React:**
 ```bash
