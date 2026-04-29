@@ -144,7 +144,7 @@ export default function BrainTumorPage() {
     if (!thumbListRef.current || !activeSess) return
     const el = thumbListRef.current.querySelector(`[data-idx="${activeSess.currentIndex}"]`)
     if (el) el.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' })
-  }, [activeSess?.currentIndex, activeSess?.key])
+  }, [activeSess])
 
   const updateSess = useCallback((key, upd) =>
     setSessions(prev => prev.map(s => s.key === key ? { ...s, ...upd } : s)), [])
@@ -270,7 +270,7 @@ export default function BrainTumorPage() {
             { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } },
           )
           setDiagHistory(prev => [saved.data, ...prev])
-        } catch (_) {}
+        } catch { void 0; }
       }
     } catch (err) {
       updateSess(key, { status: 'error', errorMsg: err.response?.data?.detail || '진단 중 오류가 발생했습니다.' })
