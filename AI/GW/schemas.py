@@ -1,17 +1,22 @@
 from pydantic import BaseModel
+from typing import List, Dict, Any, Optional
 
-class DiagnosisRequest(BaseModel):
-    patient_uid: str
-    age: int
-    gender: str
-    tumor_size_mm: float #  종양 크기 (mm)
-    obesity_bmi: str  # Normal, Overweight, etc. 비만체질량지수
-    diabetes: str     # Yes/No 당뇨여부
-    ibd: str          # Inflammatory_Bowel_Disease (Yes/No) 염증성 장질환 여부
-    genetic_mutation: str # 유전자 변이 정보 (예: KRAS, BRAF 등)
+class TrainResponse(BaseModel):
+    message: str
+    eda_plots: List[str]
+    model_comparison: Dict[str, float]
+    best_model: str
+    pipeline_path: str
 
-class DiagnosisResponse(BaseModel):
-    patient_uid: str
-    prediction: str    # Survival_Prediction (Yes/No)
-    confidence: float
-    ai_advice: str     # RAG를 통해 생성된 조언
+class PredictionRequest(BaseModel):
+    # 10개 주요 피처 예시 (실제 데이터셋 컬럼에 맞춰 확장 가능)
+    features: List[Any] 
+
+class PredictionResponse(BaseModel):
+    prediction: str
+    probability: float
+    advice: str
+
+class HealthResponse(BaseModel):
+    status: str
+    module: str
