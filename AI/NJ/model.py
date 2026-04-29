@@ -63,7 +63,7 @@ KAGGLE_TO_STD = {
     'Estimated Glomerular Filtration Rate (eGFR)': 'egfr',
 }
 
-# ── 피처 (eGFR 제외) ──────────────────────────────────────────
+# ── 피처 ──────────────────────────────────────────────────────
 NUMERIC_COLS = [
     'age', 'bp', 'sg', 'al', 'su', 'bgr', 'bu', 'sc',
     'sod', 'pot', 'hemo', 'pcv', 'wc', 'rc', 'egfr',
@@ -83,35 +83,6 @@ STAGE_INFO = {
     'Stage4':        {'desc': 'CKD 4단계 - 중증 신기능 저하 (15~29)',   'severity': 'severe',   'dialysis': False},
     'Stage5':        {'desc': 'CKD 5단계 - 신부전, 투석 필요 (< 15)',   'severity': 'critical', 'dialysis': True},
 }
-
-
-# ── 피처 중요도 가중치 ────────────────────────────────────────────
-# Core+Alert ★★★★★ → 2.5  |  Complication ★★★★ → 1.5  |  Others → 1.0
-# 이론적 분산 기여 비율: Core+Alert 약 73%, 나머지 약 27%
-FEATURE_WEIGHTS = {
-    # Core (신장 기능 + 핵심 원인)
-    'sc':  2.5,   # 크레아티닌
-    'al':  2.5,   # 알부민
-    'bp':  2.5,   # 혈압
-    'bgr': 2.5,   # 혈당
-    'dm':  2.5,   # 당뇨
-    'htn': 2.5,   # 고혈압
-    # Alert (위험 감지)
-    'pot': 2.5,   # 칼륨
-    'bu':  2.5,   # BUN
-    # Complication
-    'hemo': 1.5,  # 헤모글로빈
-    'pe':   1.5,  # 부종
-    # Others: 기본값 1.0
-}
-
-
-def apply_feature_weights(X: np.ndarray, feature_cols: list) -> np.ndarray:
-    X = X.copy()
-    for i, col in enumerate(feature_cols):
-        w = FEATURE_WEIGHTS.get(col, 1.0)
-        X[:, i] *= w
-    return X
 
 
 def assign_stage(egfr: float) -> str:
@@ -168,9 +139,6 @@ def preprocess(df, fit=True,
     else:
         X = imputer.transform(X)
         X = scaler.transform(X)
-
-    # 우선순위 피처 가중치 적용 (StandardScaler 이후)
-    X = apply_feature_weights(X, feature_cols)
 
     y = None
     if TARGET_COL in df.columns:
@@ -281,7 +249,7 @@ class KidneyPredictor:
                 "먼저 python model.py 로 학습하세요."
             )
         with open(MODEL_PATH,  'rb') as f: self.model        = pickle.load(f)
-        with open(SCALER_PATH, 'rb') as f: self.scaler       = pickle.load(f)
+        with open(SCALER_PATH, 'wb') as f: self.scaler       = pickle.load(f)
         with open(IMPUTER_PATH,'rb') as f: self.imputer      = pickle.load(f)
         with open(ENCODER_PATH,'rb') as f:
             enc = pickle.load(f)
@@ -291,8 +259,7 @@ class KidneyPredictor:
         print("✅ 신부전 모델 로드 완료")
 
     def predict(self, input_data: dict) -> dict:
-        data = {k: v for k, v in input_data.items()
-                if k != 'egfr'}
+        data = dict(input_data)
 
         df = pd.DataFrame([data])
 
@@ -318,7 +285,6 @@ class KidneyPredictor:
         X = df[self.feature_cols].values.astype(np.float32)
         X = self.imputer.transform(X)
         X = self.scaler.transform(X)
-        X = apply_feature_weights(X, self.feature_cols)
 
         pred_idx   = self.model.predict(X)[0]
         pred_proba = self.model.predict_proba(X)[0]
