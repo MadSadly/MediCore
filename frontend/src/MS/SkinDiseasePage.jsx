@@ -431,7 +431,7 @@ export default function SkinDiseasePage() {
       {/* ──── 진단 이력 상세 모달 ──── */}
       {modalDiagnosis && (() => {
         let r = {}
-        try { r = JSON.parse(modalDiagnosis.resultJson || '{}') } catch (_e) { /* ignore */ }
+        try { r = JSON.parse(modalDiagnosis.resultJson || '{}') } catch { void 0; }
         const meta = TRIAGE_META[r.triage_level] || TRIAGE_META.GREEN
         return (
           <div
