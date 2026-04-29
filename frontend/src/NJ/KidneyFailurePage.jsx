@@ -135,6 +135,7 @@ export default function KidneyFailurePage() {
   const handleSave = async () => {
     if (!result || saving || saved) return
     setSaving(true)
+    const token = localStorage.getItem('token')
     try {
       await axios.post(`/api/patients/${patientId}/diagnoses/kidney`, {
         result:           result.prediction,
@@ -143,7 +144,7 @@ export default function KidneyFailurePage() {
         severity:         result.severity,
         dialysisRequired: result.dialysis_required,
         probabilities:    result.probabilities,
-      })
+      }, { headers: { Authorization: `Bearer ${token}` } })
       setSaved(true)
     } catch {
       /* 저장 실패는 조용히 처리 */
@@ -351,6 +352,28 @@ export default function KidneyFailurePage() {
               </button>
             </div>
           </div>
+
+
+          {/* 위험 알림 */}
+          {result.alerts && result.alerts.length > 0 && (
+            <div className="space-y-2">
+              {result.alerts.map((alert, i) => (
+                <div
+                  key={i}
+                  className={`flex items-start gap-3 rounded-xl px-4 py-3 border text-sm font-medium ${
+                    alert.level === 'critical'
+                      ? 'bg-red-500/10 border-red-500/30 text-red-300'
+                      : 'bg-yellow-500/10 border-yellow-500/30 text-yellow-300'
+                  }`}
+                >
+                  <span className="mt-0.5 shrink-0 text-base">
+                    {alert.level === 'critical' ? '🚨' : '⚠️'}
+                  </span>
+                  <span>{alert.message}</span>
+                </div>
+              ))}
+            </div>
+          )}
 
           <div className="grid grid-cols-3 gap-5">
             {/* 왼쪽 2/3 */}
