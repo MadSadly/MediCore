@@ -17,7 +17,7 @@ logger = logging.getLogger("medicore.brain")
 def preprocess_node(state: DiagnosisState) -> dict:
     """NIfTI 파일 → 전처리된 텐서."""
     try:
-        tensor = preprocess_nifti(state["nifti_path"], apply_skull_strip=state.get("skull_strip", False))
+        tensor = preprocess_nifti(state["nifti_path"])
         return {"tensor": tensor}
     except Exception as e:
         logger.error(f"[preprocess] {e}")

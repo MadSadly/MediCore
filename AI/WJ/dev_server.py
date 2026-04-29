@@ -27,5 +27,11 @@ app.add_middleware(
 
 app.include_router(router)
 
+
+@app.get("/health")
+def health():
+    return {"status": "ok", "module": "brain"}
+
+
 if __name__ == "__main__":
     uvicorn.run("WJ.dev_server:app", host="0.0.0.0", port=8000, reload=True)
