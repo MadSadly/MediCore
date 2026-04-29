@@ -8,6 +8,7 @@ import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from GW.router import router  # GW 폴더 내의 router.py 임포트
+from GW.router import router
 
 app = FastAPI(title="MediCore Colon Cancer AI Server (Dev)")
 
@@ -20,6 +21,8 @@ app.add_middleware(
 )
 
 # 담당 라우터 등록
+app = FastAPI()
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 app.include_router(router)
 
 if __name__ == "__main__":
