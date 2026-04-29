@@ -4,384 +4,881 @@ import { Niivue } from '@niivue/niivue'
 import axios from 'axios'
 
 const AI_URL = import.meta.env.VITE_AI_URL || 'http://localhost:8000'
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8080'
 
-const SLICE_TYPES = [
-  { label: '3D', value: 'render' },
-  { label: 'Axial', value: 'axial' },
-  { label: 'Sagittal', value: 'sagittal' },
-  { label: 'Coronal', value: 'coronal' },
-  { label: '멀티뷰', value: 'multiplanar' },
-]
-
-// niivue sliceType 매핑
-const SLICE_TYPE_MAP = {
-  render: 4,
-  axial: 0,
-  sagittal: 1,
-  coronal: 2,
-  multiplanar: 3,
+const C = {
+  bg:     '#0d1117',
+  panel:  '#161b22',
+  border: '#21262d',
+  text:   '#e6edf3',
+  sub:    '#8b949e',
+  dim:    '#3d444d',
+  accent: '#4da6ff',
+  hover:  '#1c2128',
+  red:    '#f87171',
+  green:  '#34d399',
+  yellow: '#fbbf24',
 }
 
-const CONFIDENCE_COLOR = (conf) => {
-  if (conf >= 0.95) return 'text-green-400'
-  if (conf >= 0.85) return 'text-yellow-400'
-  return 'text-red-400'
+const confColor = (c) => c >= 0.95 ? C.green : c >= 0.85 ? C.yellow : C.red
+
+const AXES = ['axial', 'coronal', 'sagittal']
+const AXIS_ICONS = {
+  axial:    '/WJ/axial.PNG',
+  coronal:  '/WJ/coronal.PNG',
+  sagittal: '/WJ/sagital.PNG',
 }
 
-const SAFETY_COLOR = {
-  low: 'bg-green-500/10 border-green-500/30 text-green-400',
-  moderate: 'bg-yellow-500/10 border-yellow-500/30 text-yellow-400',
-  high_uncertainty: 'bg-red-500/10 border-red-500/30 text-red-400',
-}
+let _sid = 0
+const mkSess = (file, fileId) => ({
+  key:        String(++_sid),
+  fileId,
+  file,
+  fileName:   file.name,
+  uploadedAt: new Date(),
+  viewMode:   '2d',
+  axis:       null,
+  sliceCount: 0,
+  currentIndex: 0,
+  axisCache:  {},
+  status:     'idle',
+  result:     null,
+  errorMsg:   '',
+})
+
+const Btn = ({ children, onClick, disabled, primary, style: s }) => (
+  <button
+    onClick={onClick}
+    disabled={disabled}
+    style={{
+      width: '100%', padding: '9px 12px', borderRadius: 6,
+      fontSize: 13, fontWeight: 600, cursor: disabled ? 'not-allowed' : 'pointer',
+      background: disabled ? C.bg : primary ? '#0d3a5a' : C.hover,
+      border: `1px solid ${disabled ? C.border : primary ? '#1a6090' : '#30363d'}`,
+      color: disabled ? C.dim : primary ? C.accent : C.text,
+      transition: 'all 0.15s', textAlign: 'center', ...s,
+    }}
+  >
+    {children}
+  </button>
+)
+
+const Spinner = ({ size = 16 }) => (
+  <span style={{
+    width: size, height: size, flexShrink: 0,
+    border: `${size > 20 ? 3 : 2}px solid ${C.dim}`,
+    borderTopColor: C.accent, borderRadius: '50%',
+    animation: 'wj-spin 0.7s linear infinite', display: 'inline-block',
+  }} />
+)
 
 export default function BrainTumorPage() {
   const { id: patientId } = useParams()
-  const canvasRef = useRef(null)
-  const nvRef = useRef(null)
-  const fileRef = useRef(null)
 
-  const [file, setFile] = useState(null)
-  const [skullStrip, setSkullStrip] = useState(false)
-  const [sliceType, setSliceType] = useState('multiplanar')
-  const [viewerReady, setViewerReady] = useState(false)
+  const nvCanvasRef  = useRef(null)
+  const nvRef        = useRef(null)
+  const fileInputRef = useRef(null)
+  const sliceViewRef = useRef(null)
+  const thumbListRef = useRef(null)
+  const activeKeyRef = useRef(null)
 
-  const [status, setStatus] = useState('idle') // idle | uploading | done | error
-  const [result, setResult] = useState(null)
-  const [errorMsg, setErrorMsg] = useState('')
+  const [phase,       setPhase]       = useState('upload')
+  const [sessions,    setSessions]    = useState([])
+  const [activeKey,   setActiveKey]   = useState(null)
+  const [thumbsOpen,  setThumbsOpen]  = useState(true)
+  const [uploading,   setUploading]   = useState(false)
+  const [dragOver,    setDragOver]    = useState(false)
+  const [diagHistory, setDiagHistory] = useState([])
 
-  // niivue 초기화
+  // Keep ref in sync for wheel handler closure
+  useEffect(() => { activeKeyRef.current = activeKey }, [activeKey])
+
+  // ── 진단 기록 조회 ──
   useEffect(() => {
-    if (!canvasRef.current) return
+    const token = localStorage.getItem('token')
+    if (!token || !patientId) return
+    axios.get(`${BACKEND_URL}/api/patients/${patientId}/diagnoses`, {
+      headers: { Authorization: `Bearer ${token}` },
+    }).then(res => {
+      const records = (res.data || []).filter(d => d.diseaseType === 'brain-tumor')
+      setDiagHistory(records)
+    }).catch(() => {})
+  }, [patientId])
+
+  const activeSess = sessions.find(s => s.key === activeKey) ?? null
+
+  // ── Init Niivue — phase 의존: viewer 전환 시 canvas가 DOM에 생긴 직후 실행 ──
+  useEffect(() => {
+    if (phase !== 'viewer') return
+    if (!nvCanvasRef.current || nvRef.current) return
     const nv = new Niivue({
-      backColor: [0.07, 0.09, 0.13, 1],
-      show3Dcrosshair: true,
+      backColor: [0.05, 0.07, 0.09, 1],
+      show3Dcrosshair: false,
       isColorbar: false,
-      isOrientCube: true,
+      isOrientCube: false,
     })
-    nv.attachToCanvas(canvasRef.current)
+    nv.attachToCanvas(nvCanvasRef.current)
     nvRef.current = nv
-  }, [])
+  }, [phase])
 
-  // 뷰어 슬라이스 타입 변경
+  // ── Wheel scroll on main slice area ──
   useEffect(() => {
-    if (!nvRef.current || !viewerReady) return
-    nvRef.current.setSliceType(SLICE_TYPE_MAP[sliceType])
-  }, [sliceType, viewerReady])
+    const el = sliceViewRef.current
+    if (!el) return
+    const handler = (e) => {
+      e.preventDefault()
+      const key = activeKeyRef.current
+      setSessions(prev => {
+        const sess = prev.find(s => s.key === key)
+        if (!sess || !sess.sliceCount || sess.viewMode === '3d') return prev
+        const next = Math.max(0, Math.min(sess.sliceCount - 1, sess.currentIndex + (e.deltaY > 0 ? 1 : -1)))
+        return prev.map(s => s.key === key ? { ...s, currentIndex: next } : s)
+      })
+    }
+    el.addEventListener('wheel', handler, { passive: false })
+    return () => el.removeEventListener('wheel', handler)
+  }, [phase])
 
-  const loadFileToViewer = useCallback(async (f) => {
-    if (!nvRef.current) return
-    const url = URL.createObjectURL(f)
-    await nvRef.current.loadVolumes([{ url, name: f.name }])
-    nvRef.current.setSliceType(SLICE_TYPE_MAP[sliceType])
-    setViewerReady(true)
-  }, [sliceType])
+  // ── Auto-scroll active thumbnail ──
+  useEffect(() => {
+    if (!thumbListRef.current || !activeSess) return
+    const el = thumbListRef.current.querySelector(`[data-idx="${activeSess.currentIndex}"]`)
+    if (el) el.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' })
+  }, [activeSess?.currentIndex, activeSess?.key])
 
-  const handleFileChange = async (e) => {
-    const f = e.target.files?.[0]
-    if (!f) return
-    setFile(f)
-    setResult(null)
-    setErrorMsg('')
-    setStatus('idle')
-    await loadFileToViewer(f)
-  }
+  const updateSess = useCallback((key, upd) =>
+    setSessions(prev => prev.map(s => s.key === key ? { ...s, ...upd } : s)), [])
 
-  const handleDrop = async (e) => {
-    e.preventDefault()
-    const f = e.dataTransfer.files?.[0]
-    if (!f) return
-    setFile(f)
-    setResult(null)
-    setErrorMsg('')
-    setStatus('idle')
-    await loadFileToViewer(f)
-  }
-
-  const handleDiagnose = async () => {
+  // ── Upload file to AI backend ──
+  const handleFile = async (file) => {
     if (!file) return
-    setStatus('uploading')
-    setErrorMsg('')
+    const lower = file.name.toLowerCase()
+    if (!lower.endsWith('.nii') && !lower.endsWith('.nii.gz')) {
+      alert('.nii 또는 .nii.gz 파일만 지원합니다.')
+      return
+    }
+    setUploading(true)
     try {
       const form = new FormData()
       form.append('file', file)
-      const token = localStorage.getItem('token')
       const res = await axios.post(
-        `${AI_URL}/ai/brain/diagnose?skull_strip=${skullStrip}`,
+        `${AI_URL}/ai/brain/upload`,
         form,
-        {
-          headers: {
-            'Content-Type': 'multipart/form-data',
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
-          },
-        }
+        { headers: { 'Content-Type': 'multipart/form-data' } },
       )
-      setResult(res.data)
-      setStatus('done')
+      const sess = mkSess(file, res.data.fileId)
+      setSessions(prev => [...prev, sess])
+      setActiveKey(sess.key)
+      setPhase('viewer')
     } catch (err) {
-      setErrorMsg(err.response?.data?.detail || '진단 중 오류가 발생했습니다.')
-      setStatus('error')
+      alert('업로드 실패: ' + (err.response?.data?.detail || err.message))
+    } finally {
+      setUploading(false)
     }
   }
 
-  const clf = result?.classification
-  const safety = result?.safety
-  const report = result?.report
-  const refs = result?.references || []
+  // ── Generate slices for axis ──
+  const loadSlices = useCallback(async (key, fileId, axis) => {
+    setSessions(prev => prev.map(s => s.key === key ? { ...s, status: 'loading-slices', axis } : s))
+    try {
+      const res = await axios.post(`${AI_URL}/ai/brain/slices`, { fileId, axis })
+      const { sliceCount } = res.data
+      setSessions(prev => prev.map(s => s.key === key ? {
+        ...s,
+        status: 'idle',
+        axis,
+        sliceCount,
+        currentIndex: 0,
+        axisCache: { ...s.axisCache, [axis]: sliceCount },
+      } : s))
+    } catch {
+      setSessions(prev => prev.map(s => s.key === key
+        ? { ...s, status: 'error', errorMsg: '슬라이스 생성에 실패했습니다.' }
+        : s))
+    }
+  }, [])
 
-  return (
-    <div className="space-y-5">
-      {/* 헤더 */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-bold text-slate-100">뇌종양 진단</h1>
-          <p className="text-xs text-slate-500 mt-0.5">3D DenseNet121 · RAG · Gemini 리포트</p>
-        </div>
-        {result && (
-          <span className="text-xs text-slate-500 font-mono">
-            처리시간 {result.metadata?.processing_time_ms}ms
-          </span>
-        )}
-      </div>
+  // ── Axis button click ──
+  const handleAxis = (axis) => {
+    if (!activeSess || activeSess.status === 'loading-slices') return
+    if (activeSess.axis === axis && activeSess.sliceCount > 0) return
+    // Restore from cache if available
+    if (activeSess.axisCache?.[axis]) {
+      updateSess(activeSess.key, { axis, sliceCount: activeSess.axisCache[axis], currentIndex: 0 })
+      return
+    }
+    loadSlices(activeSess.key, activeSess.fileId, axis)
+  }
 
-      {/* 메인 2열: 업로드 + 뷰어 */}
-      <div className="grid grid-cols-[280px_1fr] gap-4 items-start">
-        {/* 업로드 패널 */}
-        <div className="space-y-3">
-          {/* 드래그앤드롭 영역 */}
+  // ── 3D via Niivue ──
+  const handle3D = async () => {
+    if (!activeSess?.file || !nvRef.current) return
+    const url = URL.createObjectURL(activeSess.file)
+    await nvRef.current.loadVolumes([{ url, name: activeSess.file.name }])
+    nvRef.current.setSliceType(4)
+    updateSess(activeSess.key, { viewMode: '3d' })
+  }
+
+  const handle2D = () => {
+    if (!activeSess) return
+    updateSess(activeSess.key, { viewMode: '2d' })
+  }
+
+  // ── Tab management ──
+  const switchTab = (key) => {
+    if (key === activeKey) return
+    setActiveKey(key)
+  }
+
+  const closeTab = (key, e) => {
+    e.stopPropagation()
+    setSessions(prev => {
+      const remaining = prev.filter(s => s.key !== key)
+      if (remaining.length === 0) {
+        setPhase('upload')
+        setActiveKey(null)
+      } else if (key === activeKey) {
+        setActiveKey(remaining[remaining.length - 1].key)
+      }
+      return remaining
+    })
+  }
+
+  // ── AI Diagnosis ──
+  const handleDiagnose = async () => {
+    if (!activeSess || activeSess.status === 'loading-diagnose') return
+    const key = activeSess.key
+    updateSess(key, { status: 'loading-diagnose', errorMsg: '' })
+    try {
+      const form = new FormData()
+      form.append('file', activeSess.file)
+      const token = localStorage.getItem('token')
+      const res = await axios.post(
+        `${AI_URL}/ai/brain/diagnose`,
+        form,
+        { headers: { 'Content-Type': 'multipart/form-data', ...(token ? { Authorization: `Bearer ${token}` } : {}) } },
+      )
+      updateSess(key, { status: 'done', result: res.data })
+
+      const clf = res.data.classification
+      if (clf && res.data.report) {
+        const title = `${clf.prediction === 'Tumor' ? '종양 의심' : '정상'} - ${(clf.confidence * 100).toFixed(1)}%`
+        try {
+          const saved = await axios.post(
+            `${BACKEND_URL}/api/patients/${patientId}/diagnoses`,
+            { diseaseType: 'brain-tumor', title, summary: res.data.report.impression, resultJson: JSON.stringify(res.data) },
+            { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } },
+          )
+          setDiagHistory(prev => [saved.data, ...prev])
+        } catch (_) {}
+      }
+    } catch (err) {
+      updateSess(key, { status: 'error', errorMsg: err.response?.data?.detail || '진단 중 오류가 발생했습니다.' })
+    }
+  }
+
+  // ════════════════════════════════
+  // PHASE 1 — UPLOAD SCREEN
+  // ════════════════════════════════
+  if (phase === 'upload') {
+    return (
+      <div style={{ minHeight: '100vh', background: C.bg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ width: 480, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 20, padding: '40px 24px' }}>
+          <div style={{ fontSize: 52, lineHeight: 1 }}>🧠</div>
+          <h2 style={{ color: C.text, fontSize: 22, fontWeight: 700, margin: 0 }}>뇌종양 MRI 분석</h2>
+          <p style={{ color: C.sub, fontSize: 14, margin: 0 }}>NIfTI 파일을 업로드하여 AI 진단을 시작합니다</p>
+
+          {/* Drop zone */}
           <div
-            onDrop={handleDrop}
-            onDragOver={(e) => e.preventDefault()}
-            onClick={() => fileRef.current?.click()}
-            className="border-2 border-dashed border-slate-700 hover:border-blue-500/50 rounded-xl p-5 text-center cursor-pointer transition-colors bg-slate-900/40"
+            onDragOver={e => { e.preventDefault(); setDragOver(true) }}
+            onDragLeave={() => setDragOver(false)}
+            onDrop={e => { e.preventDefault(); setDragOver(false); handleFile(e.dataTransfer.files?.[0]) }}
+            onClick={() => !uploading && fileInputRef.current?.click()}
+            style={{
+              width: '100%', padding: '48px 24px', borderRadius: 12, textAlign: 'center',
+              cursor: uploading ? 'wait' : 'pointer',
+              border: `2px dashed ${dragOver ? C.accent : C.border}`,
+              background: dragOver ? '#0d2040' : C.panel,
+              transition: 'all 0.2s',
+            }}
           >
-            <p className="text-3xl mb-2">🧠</p>
-            {file ? (
-              <>
-                <p className="text-xs font-semibold text-blue-400 truncate">{file.name}</p>
-                <p className="text-[10px] text-slate-500 mt-1">{(file.size / 1024 / 1024).toFixed(1)} MB</p>
-              </>
+            {uploading ? (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
+                <Spinner size={28} />
+                <p style={{ color: C.sub, fontSize: 14 }}>업로드 중...</p>
+              </div>
             ) : (
               <>
-                <p className="text-xs text-slate-400 font-semibold">NIfTI 파일 업로드</p>
-                <p className="text-[10px] text-slate-600 mt-1">.nii / .nii.gz</p>
+                <p style={{ color: dragOver ? C.accent : C.sub, fontSize: 14, marginBottom: 8 }}>
+                  파일을 여기에 드래그하거나 클릭하여 선택하세요
+                </p>
+                <p style={{ color: C.dim, fontSize: 12 }}>.nii / .nii.gz</p>
               </>
             )}
           </div>
-          <input
-            ref={fileRef}
-            type="file"
-            accept=".nii,.nii.gz"
-            className="hidden"
-            onChange={handleFileChange}
-          />
 
-          {/* Skull Strip 토글 */}
-          <label className="flex items-center justify-between px-3 py-2.5 bg-slate-900/60 border border-slate-800 rounded-lg cursor-pointer">
-            <div>
-              <p className="text-xs font-semibold text-slate-300">Skull Stripping</p>
-              <p className="text-[10px] text-slate-500">raw MRI 입력 시 활성화</p>
-            </div>
-            <div
-              onClick={() => setSkullStrip(v => !v)}
-              className={`w-10 h-5 rounded-full transition-colors relative ${skullStrip ? 'bg-blue-600' : 'bg-slate-700'}`}
-            >
-              <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${skullStrip ? 'translate-x-5' : 'translate-x-0.5'}`} />
-            </div>
-          </label>
+        </div>
 
-          {/* 진단 버튼 */}
-          <button
-            onClick={handleDiagnose}
-            disabled={!file || status === 'uploading'}
-            className="w-full py-2.5 rounded-xl font-semibold text-sm transition-all
-              bg-blue-600 hover:bg-blue-500 text-white
-              disabled:opacity-40 disabled:cursor-not-allowed"
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".nii,.nii.gz"
+          style={{ display: 'none' }}
+          onChange={e => { handleFile(e.target.files?.[0]); e.target.value = '' }}
+        />
+        <style>{`@keyframes wj-spin { to { transform: rotate(360deg); } }`}</style>
+      </div>
+    )
+  }
+
+  // ════════════════════════════════
+  // PHASE 2 — VIEWER SCREEN
+  // ════════════════════════════════
+  const sliceUrl = activeSess?.axis && activeSess?.sliceCount > 0
+    ? `${AI_URL}/ai/brain/slices/${activeSess.fileId}/${activeSess.axis}/slice_${String(activeSess.currentIndex).padStart(3, '0')}.png`
+    : null
+
+  const thumbUrls = activeSess?.axis && activeSess?.sliceCount > 0
+    ? Array.from({ length: activeSess.sliceCount }, (_, i) =>
+        `${AI_URL}/ai/brain/slices/${activeSess.fileId}/${activeSess.axis}/slice_${String(i).padStart(3, '0')}.png`,
+      )
+    : []
+
+  const clf    = activeSess?.result?.classification
+  const safety = activeSess?.result?.safety
+  const report = activeSess?.result?.report
+  const refs   = activeSess?.result?.references || []
+
+  return (
+    <div style={{
+      display: 'flex', flexDirection: 'column',
+      background: C.bg, color: C.text,
+      fontFamily: 'system-ui, -apple-system, sans-serif',
+    }}>
+
+      {/* ════ TAB BAR ════ */}
+      <div style={{
+        display: 'flex', alignItems: 'stretch',
+        background: C.panel, borderBottom: `1px solid ${C.border}`,
+        height: 36, flexShrink: 0, overflowX: 'auto',
+      }}>
+        {sessions.map(sess => (
+          <div
+            key={sess.key}
+            onClick={() => switchTab(sess.key)}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 6,
+              padding: '0 8px 0 12px', cursor: 'pointer',
+              maxWidth: 200, minWidth: 100, flexShrink: 0,
+              background: sess.key === activeKey ? C.bg : 'transparent',
+              borderRight: `1px solid ${C.border}`,
+              borderTop: `2px solid ${sess.key === activeKey ? C.accent : 'transparent'}`,
+              color: sess.key === activeKey ? C.text : C.sub,
+              fontSize: 12,
+            }}
           >
-            {status === 'uploading' ? (
-              <span className="flex items-center justify-center gap-2">
-                <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                분석 중...
-              </span>
-            ) : '진단 시작'}
-          </button>
-
-          {errorMsg && (
-            <p className="text-xs text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">
-              {errorMsg}
-            </p>
-          )}
-
-          {/* 뷰 전환 버튼 */}
-          {viewerReady && (
-            <div className="space-y-1">
-              <p className="text-[10px] text-slate-500 font-semibold uppercase tracking-wider px-1">뷰어 모드</p>
-              <div className="grid grid-cols-3 gap-1">
-                {SLICE_TYPES.map(({ label, value }) => (
-                  <button
-                    key={value}
-                    onClick={() => setSliceType(value)}
-                    className={`py-1.5 rounded-lg text-xs font-semibold transition-colors ${
-                      sliceType === value
-                        ? 'bg-blue-600 text-white'
-                        : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
-                    }`}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* MRI 뷰어 */}
-        <div className="bg-[#070a10] rounded-xl overflow-hidden border border-slate-800" style={{ height: '420px' }}>
-          {!viewerReady && (
-            <div className="h-full flex items-center justify-center">
-              <p className="text-slate-600 text-sm">NIfTI 파일을 업로드하면 여기에 표시됩니다</p>
-            </div>
-          )}
-          <canvas
-            ref={canvasRef}
-            style={{ width: '100%', height: '100%', display: viewerReady ? 'block' : 'none' }}
-          />
-        </div>
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
+              {sess.fileName}
+            </span>
+            {sess.status === 'loading-diagnose' && <Spinner size={10} />}
+            <span
+              onClick={e => closeTab(sess.key, e)}
+              style={{ color: C.dim, fontSize: 14, padding: '0 2px', flexShrink: 0, lineHeight: 1, cursor: 'pointer' }}
+            >×</span>
+          </div>
+        ))}
+        <button
+          onClick={() => fileInputRef.current?.click()}
+          style={{
+            width: 36, background: 'transparent', border: 'none', color: C.sub,
+            fontSize: 20, cursor: 'pointer', borderRight: `1px solid ${C.border}`,
+            display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+          }}
+        >+</button>
       </div>
 
-      {/* 진단 결과 */}
-      {status === 'done' && clf && (
-        <div className="grid grid-cols-3 gap-3">
-          {/* 판정 */}
-          <div className={`rounded-xl border p-4 ${clf.prediction === 'Tumor' ? 'bg-red-500/10 border-red-500/30' : 'bg-green-500/10 border-green-500/30'}`}>
-            <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">판정</p>
-            <p className={`text-2xl font-bold ${clf.prediction === 'Tumor' ? 'text-red-400' : 'text-green-400'}`}>
-              {clf.prediction === 'Tumor' ? '종양 의심' : '정상'}
-            </p>
-            <p className="text-[10px] text-slate-500 mt-1">{clf.prediction}</p>
+      {/* ════ 3-PANEL BODY ════ */}
+      <div style={{ display: 'flex', height: 560, flexShrink: 0 }}>
+
+        {/* ── LEFT: 2D/3D + Axis ── */}
+        <div style={{
+          width: 116, flexShrink: 0, background: C.panel,
+          borderRight: `1px solid ${C.border}`,
+          display: 'flex', flexDirection: 'column',
+          padding: '10px 8px', gap: 6, overflowY: 'auto',
+        }}>
+          {/* 2D / 3D toggle */}
+          <div style={{ display: 'flex', gap: 4, marginBottom: 4 }}>
+            {['2D', '3D'].map(m => {
+              const isActive = activeSess?.viewMode === m.toLowerCase()
+              return (
+                <button
+                  key={m}
+                  onClick={() => m === '3D' ? handle3D() : handle2D()}
+                  disabled={!activeSess}
+                  style={{
+                    flex: 1, padding: '6px 0', fontSize: 12, fontWeight: 700,
+                    background: isActive ? '#1c4a6e' : C.hover,
+                    color: isActive ? C.accent : C.sub,
+                    border: `1px solid ${isActive ? '#2a6090' : C.border}`,
+                    borderRadius: 4, cursor: activeSess ? 'pointer' : 'not-allowed',
+                    opacity: activeSess ? 1 : 0.5,
+                  }}
+                >{m}</button>
+              )
+            })}
           </div>
 
-          {/* 확신도 */}
-          <div className="rounded-xl border border-slate-700 bg-slate-900/50 p-4">
-            <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">확신도</p>
-            <p className={`text-2xl font-bold ${CONFIDENCE_COLOR(clf.confidence)}`}>
-              {(clf.confidence * 100).toFixed(1)}%
-            </p>
-            <div className="mt-2 h-1.5 bg-slate-800 rounded-full overflow-hidden">
+          <div style={{ height: 1, background: C.border, margin: '2px 0' }} />
+
+          {/* Axis buttons */}
+          {AXES.map(axis => {
+            const isActive  = activeSess?.axis === axis
+            const isLoading = activeSess?.status === 'loading-slices' && activeSess?.axis === axis
+            return (
               <div
-                className={`h-full rounded-full transition-all ${clf.confidence >= 0.95 ? 'bg-green-500' : clf.confidence >= 0.85 ? 'bg-yellow-500' : 'bg-red-500'}`}
-                style={{ width: `${clf.confidence * 100}%` }}
-              />
+                key={axis}
+                onClick={() => activeSess?.viewMode !== '3d' && handleAxis(axis)}
+                style={{
+                  padding: '8px 6px', borderRadius: 6, textAlign: 'center',
+                  cursor: activeSess && activeSess.viewMode !== '3d' ? 'pointer' : 'default',
+                  background: isActive ? '#1c3a52' : C.hover,
+                  border: `1px solid ${isActive ? '#1a5070' : C.border}`,
+                  opacity: activeSess && activeSess.viewMode !== '3d' ? 1 : 0.35,
+                }}
+              >
+                <p style={{
+                  fontSize: 10, letterSpacing: '0.1em', fontWeight: 600,
+                  color: isActive ? C.accent : C.sub, textTransform: 'uppercase', marginBottom: 5,
+                }}>
+                  {axis.slice(0, 3).toUpperCase()}
+                </p>
+                <div style={{ position: 'relative', display: 'flex', justifyContent: 'center' }}>
+                  <img
+                    src={AXIS_ICONS[axis]}
+                    alt={axis}
+                    style={{ width: 60, height: 54, objectFit: 'contain', opacity: isActive ? 1 : 0.55 }}
+                  />
+                  {isLoading && (
+                    <div style={{
+                      position: 'absolute', inset: 0,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      background: 'rgba(13,17,23,0.75)', borderRadius: 4,
+                    }}>
+                      <Spinner size={18} />
+                    </div>
+                  )}
+                </div>
+              </div>
+            )
+          })}
+
+          {!activeSess && (
+            <p style={{ fontSize: 10, color: C.dim, textAlign: 'center', marginTop: 6, lineHeight: 1.7 }}>
+              파일을<br />업로드하면<br />활성화됩니다
+            </p>
+          )}
+        </div>
+
+        {/* ── CENTER: Viewer + Thumbnails ── */}
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+
+          {/* Title bar */}
+          <div style={{
+            height: 34, display: 'flex', alignItems: 'center',
+            paddingLeft: 16, paddingRight: 16,
+            borderBottom: `1px solid ${C.border}`, flexShrink: 0, background: C.panel,
+          }}>
+            <span style={{ fontSize: 13, fontWeight: 600, color: C.text, letterSpacing: '0.04em' }}>
+              {activeSess?.viewMode === '3d'
+                ? '3D Render'
+                : activeSess?.axis
+                  ? `${activeSess.axis.toUpperCase()} View`
+                  : 'BRAIN TUMOR ANALYSIS'}
+            </span>
+            {activeSess?.sliceCount > 0 && activeSess.viewMode !== '3d' && (
+              <span style={{ marginLeft: 'auto', fontSize: 11, color: C.dim }}>
+                {activeSess.currentIndex + 1} / {activeSess.sliceCount}
+              </span>
+            )}
+          </div>
+
+          {/* Main image area — wheel listener attached here */}
+          <div ref={sliceViewRef} style={{ flex: 1, position: 'relative', background: '#050709', overflow: 'hidden' }}>
+
+            {/* Niivue 3D — wrapper div controls visibility so Niivue can't escape display:none by touching canvas.style */}
+            <div style={{ position: 'absolute', inset: 0, display: activeSess?.viewMode === '3d' ? 'block' : 'none' }}>
+              <canvas ref={nvCanvasRef} style={{ width: '100%', height: '100%' }} />
             </div>
-            <div className="flex justify-between mt-1">
-              <span className="text-[9px] text-slate-600">종양 {(clf.tumor_probability * 100).toFixed(1)}%</span>
-              <span className="text-[9px] text-slate-600">정상 {(clf.normal_probability * 100).toFixed(1)}%</span>
+
+            {/* 2D slice image */}
+            <div style={{ position: 'absolute', inset: 0, display: activeSess?.viewMode === '3d' ? 'none' : 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              {sliceUrl
+                ? <img
+                    src={sliceUrl}
+                    alt="MRI slice"
+                    style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', display: 'block' }}
+                  />
+                : <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
+                    {activeSess?.status === 'loading-slices'
+                      ? <>
+                          <Spinner size={28} />
+                          <p style={{ color: C.sub, fontSize: 13 }}>슬라이스 생성 중...</p>
+                        </>
+                      : <>
+                          <div style={{ fontSize: 40, opacity: 0.2 }}>🧠</div>
+                          <p style={{ color: C.dim, fontSize: 14 }}>좌측에서 축(Axis)을 선택하세요</p>
+                          <p style={{ color: C.dim, fontSize: 11, opacity: 0.7 }}>Axial / Coronal / Sagittal</p>
+                        </>
+                    }
+                  </div>
+              }
             </div>
           </div>
 
-          {/* 안전 등급 */}
-          {safety && (
-            <div className={`rounded-xl border p-4 ${SAFETY_COLOR[safety.risk_level] || SAFETY_COLOR.low}`}>
-              <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">안전 등급</p>
-              <p className="text-lg font-bold capitalize">{safety.risk_level.replace('_', ' ')}</p>
-              <p className="text-[10px] mt-1 opacity-80">{safety.clinical_action}</p>
-              {safety.requires_specialist_review && (
-                <span className="inline-block mt-2 text-[9px] bg-yellow-500/20 text-yellow-400 px-2 py-0.5 rounded-full">
-                  전문의 검토 필요
+          {/* Thumbnail strip */}
+          {activeSess?.viewMode !== '3d' && (
+            <div style={{ flexShrink: 0, background: '#080c10', borderTop: `1px solid ${C.border}` }}>
+              {/* Toggle button row */}
+              <div style={{ display: 'flex', justifyContent: 'flex-end', borderBottom: `1px solid ${C.border}` }}>
+                <span style={{ color: C.dim, fontSize: 11, padding: '1px 8px', alignSelf: 'center', marginRight: 'auto', marginLeft: 8 }}>
+                  Thumbnails
                 </span>
+                <button
+                  onClick={() => setThumbsOpen(p => !p)}
+                  style={{
+                    background: 'transparent', border: 'none', color: C.dim,
+                    cursor: 'pointer', padding: '3px 12px', fontSize: 11,
+                  }}
+                >{thumbsOpen ? '▲' : '▼'}</button>
+              </div>
+
+              {thumbsOpen && (
+                <div
+                  ref={thumbListRef}
+                  style={{
+                    display: 'flex', gap: 4, padding: '6px 8px',
+                    overflowX: 'auto', height: 82,
+                    scrollbarWidth: 'thin', scrollbarColor: `${C.dim} transparent`,
+                  }}
+                >
+                  {thumbUrls.length > 0
+                    ? thumbUrls.map((url, i) => (
+                        <div
+                          key={i}
+                          data-idx={i}
+                          onClick={() => activeSess && updateSess(activeSess.key, { currentIndex: i })}
+                          style={{
+                            flexShrink: 0, width: 60, height: 70, borderRadius: 4,
+                            overflow: 'hidden', cursor: 'pointer',
+                            border: `2px solid ${i === activeSess?.currentIndex ? C.accent : C.border}`,
+                            background: C.panel,
+                          }}
+                        >
+                          <img
+                            src={url}
+                            alt={`slice ${i}`}
+                            loading="lazy"
+                            style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                          />
+                        </div>
+                      ))
+                    : <p style={{ color: C.dim, fontSize: 11, margin: 'auto' }}>
+                        축을 선택하면 썸네일이 표시됩니다
+                      </p>
+                  }
+                </div>
               )}
             </div>
           )}
         </div>
-      )}
 
-      {/* LLM 리포트 */}
-      {report && (
-        <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-5 space-y-4">
-          <h2 className="text-sm font-bold text-slate-200 flex items-center gap-2">
-            <span className="w-1.5 h-1.5 bg-blue-500 rounded-full" />
-            AI 소견 리포트
-          </h2>
+        {/* ── RIGHT: MRI Records + Diag History + Buttons ── */}
+        <div style={{
+          width: 220, flexShrink: 0, background: C.panel,
+          borderLeft: `1px solid ${C.border}`,
+          display: 'flex', flexDirection: 'column',
+        }}>
+          {/* Header */}
+          <div style={{ padding: '10px 12px 8px', borderBottom: `1px solid ${C.border}` }}>
+            <span style={{ fontSize: 12, fontWeight: 600, color: C.sub, letterSpacing: '0.04em' }}>
+              환자 MRI 기록
+            </span>
+          </div>
 
-          {report.summary && (
-            <div>
-              <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-1">요약</p>
-              <p className="text-sm text-slate-300 leading-relaxed">{report.summary}</p>
-            </div>
-          )}
-
-          {report.findings?.length > 0 && (
-            <div>
-              <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-2">주요 소견</p>
-              <ul className="space-y-1">
-                {report.findings.map((f, i) => (
-                  <li key={i} className="flex gap-2 text-sm text-slate-300">
-                    <span className="text-blue-500 mt-0.5">·</span>
-                    <span>{f}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-
-          {report.recommendations?.length > 0 && (
-            <div>
-              <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-2">권고사항</p>
-              <ul className="space-y-1">
-                {report.recommendations.map((r, i) => (
-                  <li key={i} className="flex gap-2 text-sm text-slate-300">
-                    <span className="text-green-500 mt-0.5">→</span>
-                    <span>{r}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-
-          {report.differential_diagnosis?.length > 0 && (
-            <div>
-              <p className="text-[10px] text-slate-500 uppercase tracking-wider mb-2">감별 진단</p>
-              <div className="flex flex-wrap gap-2">
-                {report.differential_diagnosis.map((d, i) => (
-                  <span key={i} className="text-xs bg-slate-800 text-slate-300 px-2.5 py-1 rounded-full border border-slate-700">
-                    {d}
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* RAG 참고 문헌 */}
-      {refs.length > 0 && (
-        <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-5">
-          <h2 className="text-sm font-bold text-slate-200 mb-3 flex items-center gap-2">
-            <span className="w-1.5 h-1.5 bg-purple-500 rounded-full" />
-            참고 문헌 ({refs.length}건)
-          </h2>
-          <div className="space-y-2">
-            {refs.map((ref, i) => (
-              <div key={i} className="flex gap-3 text-xs">
-                <span className="text-slate-600 font-mono w-4 flex-shrink-0">{i + 1}</span>
-                <div className="min-w-0">
-                  <p className="text-slate-400 truncate">{ref.source}</p>
-                  <p className="text-slate-600 mt-0.5 line-clamp-2">{ref.content?.slice(0, 120)}...</p>
+          {/* Session list */}
+          <div style={{ padding: '8px 10px', borderBottom: `1px solid ${C.border}` }}>
+            {sessions.length === 0
+              ? <p style={{ fontSize: 11, color: C.dim, textAlign: 'center', padding: '8px 0' }}>업로드된 파일 없음</p>
+              : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  {sessions.map(sess => (
+                    <div
+                      key={sess.key}
+                      onClick={() => switchTab(sess.key)}
+                      style={{
+                        padding: '7px 10px', borderRadius: 6, cursor: 'pointer',
+                        background: sess.key === activeKey ? '#1c3a52' : C.hover,
+                        border: `1px solid ${sess.key === activeKey ? C.accent : C.border}`,
+                      }}
+                    >
+                      <p style={{
+                        fontSize: 12, color: sess.key === activeKey ? C.accent : C.text,
+                        fontWeight: sess.key === activeKey ? 600 : 400,
+                        marginBottom: 2, overflow: 'hidden',
+                        textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                      }}>
+                        {sess.fileName}
+                      </p>
+                      <p style={{ fontSize: 10, color: C.sub }}>
+                        {sess.uploadedAt.toLocaleString('ko-KR', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                      </p>
+                    </div>
+                  ))}
                 </div>
-                <span className="flex-shrink-0 text-purple-400 text-[10px] font-mono">
-                  {(ref.score * 100).toFixed(0)}%
-                </span>
-              </div>
-            ))}
+              )
+            }
+          </div>
+
+          {/* 진단 기록 (DB) */}
+          <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
+            <div style={{ padding: '8px 12px 6px', borderBottom: `1px solid ${C.border}` }}>
+              <span style={{ fontSize: 11, fontWeight: 600, color: C.sub, letterSpacing: '0.04em' }}>
+                진단 기록
+              </span>
+            </div>
+            <div style={{ flex: 1, overflowY: 'auto', padding: '6px 10px' }}>
+              {diagHistory.length === 0
+                ? <p style={{ fontSize: 11, color: C.dim, textAlign: 'center', marginTop: 14 }}>진단 기록 없음</p>
+                : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                    {diagHistory.map((d, i) => {
+                      const isTumor = d.title?.includes('종양')
+                      return (
+                        <div key={d.id ?? i} style={{
+                          padding: '8px 10px', borderRadius: 6,
+                          background: C.hover,
+                          border: `1px solid ${isTumor ? '#3a1a1a' : '#1a3a2a'}`,
+                        }}>
+                          {/* 판정 뱃지 + 제목 */}
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 3 }}>
+                            <span style={{
+                              fontSize: 10, fontWeight: 700, padding: '1px 5px', borderRadius: 3,
+                              background: isTumor ? '#3a0a0a' : '#0a2a1a',
+                              color: isTumor ? C.red : C.green,
+                              flexShrink: 0,
+                            }}>
+                              {isTumor ? 'TUMOR' : 'NORMAL'}
+                            </span>
+                            <p style={{
+                              fontSize: 11, color: C.text, overflow: 'hidden',
+                              textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1,
+                            }}>
+                              {d.title || 'AI 진단'}
+                            </p>
+                          </div>
+                          {/* 요약 */}
+                          {d.summary && (
+                            <p style={{
+                              fontSize: 10, color: C.sub, lineHeight: 1.5,
+                              overflow: 'hidden', display: '-webkit-box',
+                              WebkitLineClamp: 2, WebkitBoxOrient: 'vertical',
+                            }}>
+                              {d.summary}
+                            </p>
+                          )}
+                          {/* 날짜 */}
+                          <p style={{ fontSize: 10, color: C.dim, marginTop: 3 }}>
+                            {d.createdAt
+                              ? new Date(d.createdAt).toLocaleString('ko-KR', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
+                              : ''}
+                          </p>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )
+              }
+            </div>
+          </div>
+
+          {/* Error message */}
+          {activeSess?.errorMsg && (
+            <div style={{ padding: '0 10px 6px' }}>
+              <p style={{
+                fontSize: 11, color: C.red,
+                padding: '6px 8px', background: '#1a0808',
+                border: '1px solid #3a1010', borderRadius: 4, lineHeight: 1.5,
+              }}>
+                {activeSess.errorMsg}
+              </p>
+            </div>
+          )}
+
+          {/* Action buttons */}
+          <div style={{ padding: 10, borderTop: `1px solid ${C.border}`, display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <Btn onClick={() => fileInputRef.current?.click()}>파일 업로드</Btn>
+            <Btn
+              onClick={activeSess?.viewMode === '3d' ? handle2D : handle3D}
+              disabled={!activeSess}
+            >
+              {activeSess?.viewMode === '3d' ? '2D 변환' : '3D 변환'}
+            </Btn>
+            <Btn
+              onClick={handleDiagnose}
+              disabled={!activeSess || activeSess.status === 'loading-diagnose'}
+              primary
+            >
+              {activeSess?.status === 'loading-diagnose'
+                ? <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+                    <Spinner size={12} />분석 중...
+                  </span>
+                : '분석하기'
+              }
+            </Btn>
           </div>
         </div>
+      </div>
+
+      {/* ════ ANALYSIS RESULTS PANEL ════ */}
+      {activeSess?.status === 'done' && clf && (
+        <div style={{ background: C.bg, borderTop: `1px solid ${C.border}`, padding: 16 }}>
+
+          {/* Classification cards */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 12 }}>
+            <div style={{ padding: 16, borderRadius: 8, background: C.panel, border: `1px solid ${clf.prediction === 'Tumor' ? '#4a1a1a' : '#1a4a2a'}` }}>
+              <p style={{ fontSize: 11, letterSpacing: '0.15em', color: C.sub, textTransform: 'uppercase', marginBottom: 8 }}>Prediction</p>
+              <p style={{ fontSize: 24, fontWeight: 700, color: clf.prediction === 'Tumor' ? C.red : C.green }}>
+                {clf.prediction === 'Tumor' ? 'TUMOR' : 'NORMAL'}
+              </p>
+              <p style={{ fontSize: 11, color: C.sub, marginTop: 4 }}>{clf.prediction}</p>
+            </div>
+
+            <div style={{ padding: 16, borderRadius: 8, background: C.panel, border: `1px solid ${C.border}` }}>
+              <p style={{ fontSize: 11, letterSpacing: '0.15em', color: C.sub, textTransform: 'uppercase', marginBottom: 8 }}>Confidence</p>
+              <p style={{ fontSize: 24, fontWeight: 700, color: confColor(clf.confidence) }}>
+                {(clf.confidence * 100).toFixed(1)}%
+              </p>
+              <div style={{ marginTop: 10, height: 3, background: C.border, borderRadius: 2 }}>
+                <div style={{ width: `${clf.confidence * 100}%`, height: '100%', background: confColor(clf.confidence), borderRadius: 2 }} />
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 5 }}>
+                <span style={{ fontSize: 11, color: C.sub }}>Tumor {(clf.tumor_probability * 100).toFixed(1)}%</span>
+                <span style={{ fontSize: 11, color: C.sub }}>Normal {(clf.normal_probability * 100).toFixed(1)}%</span>
+              </div>
+            </div>
+
+            {safety && (
+              <div style={{ padding: 16, borderRadius: 8, background: C.panel, border: `1px solid ${C.border}` }}>
+                <p style={{ fontSize: 11, letterSpacing: '0.15em', color: C.sub, textTransform: 'uppercase', marginBottom: 8 }}>Risk Level</p>
+                <p style={{ fontSize: 16, fontWeight: 700, textTransform: 'uppercase', color: safety.risk_level === 'low' ? C.green : safety.risk_level === 'moderate' ? C.yellow : C.red }}>
+                  {safety.risk_level?.replace('_', ' ')}
+                </p>
+                <p style={{ fontSize: 12, color: C.sub, marginTop: 6, lineHeight: 1.6 }}>{safety.clinical_action}</p>
+                {safety.requires_specialist_review && (
+                  <span style={{ display: 'inline-block', marginTop: 6, fontSize: 11, padding: '2px 8px', borderRadius: 4, background: '#1a1408', color: C.yellow, border: '1px solid #2a2010' }}>
+                    전문의 검토 필요
+                  </span>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* LLM Medical Report */}
+          {report && (
+            <div style={{ padding: 18, borderRadius: 8, background: C.panel, border: `1px solid ${C.border}` }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16, paddingBottom: 12, borderBottom: `1px solid ${C.border}` }}>
+                <div style={{ width: 6, height: 6, borderRadius: '50%', background: C.accent }} />
+                <p style={{ fontSize: 12, fontWeight: 600, letterSpacing: '0.12em', color: C.sub, textTransform: 'uppercase' }}>AI Medical Report</p>
+                {activeSess.result?.metadata?.processing_time_ms && (
+                  <span style={{ marginLeft: 'auto', fontSize: 11, color: C.dim }}>
+                    {activeSess.result.metadata.processing_time_ms}ms
+                  </span>
+                )}
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                {report.impression && (
+                  <div>
+                    <p style={{ fontSize: 11, letterSpacing: '0.15em', color: C.sub, textTransform: 'uppercase', marginBottom: 6 }}>Impression</p>
+                    <p style={{ fontSize: 14, color: C.text, lineHeight: 1.8 }}>{report.impression}</p>
+                  </div>
+                )}
+                {report.findings && (
+                  <div>
+                    <p style={{ fontSize: 11, letterSpacing: '0.15em', color: C.sub, textTransform: 'uppercase', marginBottom: 6 }}>Findings</p>
+                    <p style={{ fontSize: 14, color: C.text, lineHeight: 1.8 }}>{report.findings}</p>
+                  </div>
+                )}
+                {report.recommendations?.length > 0 && (
+                  <div>
+                    <p style={{ fontSize: 11, letterSpacing: '0.15em', color: C.sub, textTransform: 'uppercase', marginBottom: 6 }}>Recommendations</p>
+                    <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      {report.recommendations.map((r, i) => (
+                        <li key={i} style={{ display: 'flex', gap: 10, fontSize: 14, color: C.text, lineHeight: 1.7 }}>
+                          <span style={{ color: C.accent, flexShrink: 0 }}>▸</span><span>{r}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {report.differential_diagnosis?.length > 0 && (
+                  <div>
+                    <p style={{ fontSize: 11, letterSpacing: '0.15em', color: C.sub, textTransform: 'uppercase', marginBottom: 6 }}>Differential Diagnosis</p>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                      {report.differential_diagnosis.map((d, i) => (
+                        <span key={i} style={{ fontSize: 12, padding: '4px 10px', borderRadius: 4, background: '#0d1a28', color: C.accent, border: '1px solid #1a3050' }}>{d}</span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* RAG references */}
+          {refs.length > 0 && (
+            <div style={{ marginTop: 10, padding: 16, borderRadius: 8, background: C.panel, border: `1px solid ${C.border}` }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#7c5fdc' }} />
+                <p style={{ fontSize: 12, fontWeight: 600, letterSpacing: '0.12em', color: C.sub, textTransform: 'uppercase' }}>
+                  References ({refs.length})
+                </p>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {refs.map((ref, i) => (
+                  <div key={i} style={{ display: 'flex', gap: 12, fontSize: 13 }}>
+                    <span style={{ color: C.dim, flexShrink: 0, width: 16, fontFamily: 'monospace' }}>{i + 1}</span>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <p style={{ color: C.sub, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ref.source}</p>
+                      <p style={{ color: C.dim, marginTop: 2, lineHeight: 1.5, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
+                        {ref.content?.slice(0, 120)}...
+                      </p>
+                    </div>
+                    <span style={{ flexShrink: 0, color: '#7c5fdc', fontSize: 12, fontFamily: 'monospace' }}>
+                      {((ref.relevance_score ?? 0) * 100).toFixed(0)}%
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {activeSess.result?.disclaimer && (
+            <p style={{ marginTop: 10, fontSize: 12, color: C.sub, lineHeight: 1.7 }}>
+              ⚠ {activeSess.result.disclaimer}
+            </p>
+          )}
+        </div>
       )}
 
-      {/* 면책 */}
-      {result?.disclaimer && (
-        <p className="text-[10px] text-slate-600 border-t border-slate-800 pt-3 leading-relaxed">
-          ⚠ {result.disclaimer}
-        </p>
-      )}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".nii,.nii.gz"
+        style={{ display: 'none' }}
+        onChange={e => { handleFile(e.target.files?.[0]); e.target.value = '' }}
+      />
+      <style>{`@keyframes wj-spin { to { transform: rotate(360deg); } }`}</style>
     </div>
   )
 }
