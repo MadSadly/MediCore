@@ -36,6 +36,10 @@ MS_run_all.bat
 
 0_projectPrompt/
 
+# .gitignore 파일 안에 아래 내용을 추가
+out/
+build/
+.gradle/
 # exe
 MS_run_all.bat
 

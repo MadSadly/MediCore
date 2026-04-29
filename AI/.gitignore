@@ -22,3 +22,9 @@ __pycache__/
 # 업로드된 이미지/파일
 uploads/
 temp/
+
+# .gitignore 파일 안에 아래 내용을 추가
+out/
+build/
+.gradle/
+.idea/

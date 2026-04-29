@@ -1,0 +1,8 @@
+pip install torch torchvision timm
+pip install langgraph langchain-google-genai
+pip install --upgrade langgraph langchain-core
+
+
+//이건 내꺼아니고 wj꺼 같데... 깔아줘야 실행댐
+pip install monai
+nibabel
