@@ -32,5 +32,6 @@ Thumbs.db
 # IDE
 .vscode/
 .idea/
+MS_run_all.bat
 
 0_projectPrompt/
