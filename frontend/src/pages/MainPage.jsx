@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import axios from 'axios'
-import { Users, Clock, CheckCircle, FileText, Filter, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Users, Clock, CheckCircle, FileText, Filter, ChevronLeft, ChevronRight, Search, X } from 'lucide-react'
 
 const COLOR = {
   blue:    { dot: 'bg-blue-500',    bg: 'bg-blue-900/20',    border: 'border-blue-800/30',    avatar: 'bg-blue-600/10 text-blue-400 border-blue-600/20' },
@@ -17,26 +17,47 @@ const STATS = [
   { label: 'AI 분석',   icon: FileText,     iconColor: 'text-blue-400',    bg: 'bg-blue-600/10'    },
 ]
 
+const PAGE_SIZE = 10
+
 export default function MainPage() {
   const navigate = useNavigate()
   const user = JSON.parse(localStorage.getItem('user') || '{}')
-  const [patients, setPatients] = useState([])
-  const [loading, setLoading] = useState(true)
+  const [patients, setPatients]   = useState([])
+  const [loading, setLoading]     = useState(true)
+  const [query, setQuery]         = useState('')
+  const [page, setPage]           = useState(1)
 
   useEffect(() => {
     const token = localStorage.getItem('token')
-    axios.get('/api/patients', {
-      headers: { Authorization: `Bearer ${token}` },
-    })
+    axios.get('/api/patients', { headers: { Authorization: `Bearer ${token}` } })
       .then(res => setPatients(res.data))
       .catch(() => setPatients([]))
       .finally(() => setLoading(false))
   }, [])
 
+  // 검색 필터 — 이름 또는 환자번호
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    if (!q) return patients
+    return patients.filter(p =>
+      p.name?.toLowerCase().includes(q) ||
+      p.uid?.toLowerCase().includes(q)
+    )
+  }, [patients, query])
+
+  // 페이지네이션
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
+  const paged      = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
+
+  const handleSearch = (e) => {
+    setQuery(e.target.value)
+    setPage(1) // 검색 시 첫 페이지로
+  }
+
   const statValues = [
     patients.length,
     patients.filter(p => p.status === 'WAITING').length || '-',
-    patients.filter(p => p.status === 'DONE').length || '-',
+    patients.filter(p => p.status === 'DONE').length    || '-',
     '-',
   ]
 
@@ -67,13 +88,39 @@ export default function MainPage() {
 
       {/* Patient table */}
       <div className="bg-[#0F172A] border border-[#1E293B] rounded-2xl overflow-hidden">
-        <div className="px-8 py-5 border-b border-slate-800 flex justify-between items-center bg-slate-900/50">
+        {/* 테이블 헤더 */}
+        <div className="px-8 py-5 border-b border-slate-800 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-slate-900/50">
           <div className="flex items-center gap-4">
             <h3 className="text-xl font-bold text-slate-100">환자 목록</h3>
             <span className="px-2 py-0.5 bg-red-600/10 text-red-500 text-[10px] font-black rounded-md border border-red-600/20">LIVE</span>
+            {query && (
+              <span className="text-xs text-slate-500">
+                {filtered.length}명 검색됨
+              </span>
+            )}
           </div>
-          <div className="flex items-center gap-2">
-            <button className="flex items-center gap-2 px-4 py-2 bg-slate-800 text-slate-300 rounded-lg text-sm font-semibold hover:bg-slate-700 transition-colors">
+
+          {/* 검색창 */}
+          <div className="flex items-center gap-3 w-full sm:w-auto">
+            <div className="relative flex-1 sm:w-72">
+              <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+              <input
+                type="text"
+                value={query}
+                onChange={handleSearch}
+                placeholder="환자 이름 또는 환자번호 검색"
+                className="w-full pl-9 pr-8 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-blue-500 transition-colors"
+              />
+              {query && (
+                <button
+                  onClick={() => { setQuery(''); setPage(1) }}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
+                >
+                  <X size={14} />
+                </button>
+              )}
+            </div>
+            <button className="flex items-center gap-2 px-4 py-2 bg-slate-800 text-slate-300 rounded-lg text-sm font-semibold hover:bg-slate-700 transition-colors whitespace-nowrap">
               <Filter size={15} /> 필터
             </button>
           </div>
@@ -91,17 +138,19 @@ export default function MainPage() {
             <tbody className="divide-y divide-slate-800">
               {loading ? (
                 <tr>
-                  <td colSpan={7} className="px-6 py-16 text-center text-slate-500">불러오는 중...</td>
+                  <td colSpan={7} className="px-6 py-16 text-center">
+                    <div className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto" />
+                  </td>
                 </tr>
-              ) : patients.length === 0 ? (
+              ) : paged.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="px-6 py-16 text-center text-slate-500">
-                    <p className="text-3xl mb-3">🏥</p>
-                    <p>등록된 환자가 없습니다.</p>
+                    <p className="text-3xl mb-3">{query ? '🔍' : '🏥'}</p>
+                    <p>{query ? `'${query}'에 해당하는 환자가 없습니다.` : '등록된 환자가 없습니다.'}</p>
                   </td>
                 </tr>
               ) : (
-                patients.map((p) => {
+                paged.map((p) => {
                   const c = COLOR.blue
                   return (
                     <tr
@@ -139,12 +188,52 @@ export default function MainPage() {
           </table>
         </div>
 
+        {/* 페이지네이션 */}
         <div className="px-8 py-4 border-t border-slate-800 flex justify-between items-center bg-slate-900/20">
-          <p className="text-sm text-slate-500">총 {patients.length}명 · 행을 더블클릭하면 상세 분석 페이지로 이동합니다</p>
+          <p className="text-sm text-slate-500">
+            총 {filtered.length}명
+            {query && ` (전체 ${patients.length}명 중)`}
+            {' · '}행을 더블클릭하면 상세 분석 페이지로 이동합니다
+          </p>
           <div className="flex items-center gap-2">
-            <button className="p-2 rounded-lg hover:bg-slate-800 text-slate-500 transition-all"><ChevronLeft size={16} /></button>
-            <button className="w-8 h-8 rounded-lg bg-blue-600 text-white text-sm font-bold">1</button>
-            <button className="p-2 rounded-lg hover:bg-slate-800 text-slate-500 transition-all"><ChevronRight size={16} /></button>
+            <button
+              onClick={() => setPage(p => Math.max(1, p - 1))}
+              disabled={page === 1}
+              className="p-2 rounded-lg hover:bg-slate-800 text-slate-500 transition-all disabled:opacity-30"
+            >
+              <ChevronLeft size={16} />
+            </button>
+            {Array.from({ length: totalPages }, (_, i) => i + 1)
+              .filter(n => n === 1 || n === totalPages || Math.abs(n - page) <= 1)
+              .reduce((acc, n, idx, arr) => {
+                if (idx > 0 && n - arr[idx - 1] > 1) acc.push('...')
+                acc.push(n)
+                return acc
+              }, [])
+              .map((n, i) =>
+                n === '...' ? (
+                  <span key={`dot-${i}`} className="text-slate-600 px-1 text-sm">…</span>
+                ) : (
+                  <button
+                    key={n}
+                    onClick={() => setPage(n)}
+                    className={`w-8 h-8 rounded-lg text-sm font-bold transition-all ${
+                      page === n
+                        ? 'bg-blue-600 text-white'
+                        : 'hover:bg-slate-800 text-slate-500'
+                    }`}
+                  >
+                    {n}
+                  </button>
+                )
+              )}
+            <button
+              onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+              disabled={page === totalPages}
+              className="p-2 rounded-lg hover:bg-slate-800 text-slate-500 transition-all disabled:opacity-30"
+            >
+              <ChevronRight size={16} />
+            </button>
           </div>
         </div>
       </div>
