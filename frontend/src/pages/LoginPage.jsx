@@ -16,7 +16,12 @@ export default function LoginPage() {
   const [loading, setLoading]       = useState(false)
   const navigate = useNavigate()
 
-  const set = (k) => (e) => setForm(f => ({ ...f, [k]: e.target.value }))
+  const set = (k) => (e) => {
+    const v = ['hospitalCode', 'employeeNumber'].includes(k)
+      ? e.target.value.toUpperCase()
+      : e.target.value
+    setForm(f => ({ ...f, [k]: v }))
+  }
 
   const handleLogin = async (e) => {
     e.preventDefault()
