@@ -25,6 +25,7 @@ export default function SkinDiseasePage() {
   const [saved, setSaved]             = useState(false)
   const [diagnoses, setDiagnoses]     = useState([])
   const [loadingHist, setLoadingHist] = useState(true)
+  const [modalDiagnosis, setModalDiagnosis] = useState(null)
 
   const fileInputRef = useRef(null)
   const token = localStorage.getItem('token')
@@ -32,9 +33,10 @@ export default function SkinDiseasePage() {
 
   // 이 환자의 피부질환 진단 이력 로드
   useEffect(() => {
-    axios.get(`/api/patients/${id}/diagnoses`, { headers: authHeaders })
+    const tok = localStorage.getItem('token')
+    axios.get(`/api/patients/${id}/diagnoses`, { headers: { Authorization: `Bearer ${tok}` } })
       .then(res => setDiagnoses(res.data.filter(d => d.diseaseType === 'skin-disease')))
-      .catch(() => {})
+      .catch(() => { /* ignore */ })
       .finally(() => setLoadingHist(false))
   }, [id])
 
@@ -97,6 +99,7 @@ export default function SkinDiseasePage() {
         summary:     `신뢰도 ${result.confidence.toFixed(1)}% | ${recommendLine?.replace(/^\s*\[?권고사항\]?\s*/, '').trim() || '전문의 상담 권장'}`,
         resultJson:  JSON.stringify(result),
         createdBy:   'Dr. Kim Minsu (MS)',
+        createdAt:   new Date().toISOString().slice(0, 19),
       }
       await axios.post(`/api/patients/${id}/diagnoses`, diagnosis, { headers: authHeaders })
       setSaved(true)
@@ -270,59 +273,66 @@ export default function SkinDiseasePage() {
               </div>
             </div>
 
-            {/* 오른쪽: Grad-CAM 열지도 */}
+            {/* 오른쪽: 원본 vs Grad-CAM 비교 */}
             <div className="glass-card rounded-2xl p-6 border border-slate-700/50">
               <div className="flex items-center gap-2 mb-5">
                 <span className="w-2 h-2 rounded-full bg-amber-400" />
-                <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest">Grad-CAM 열지도 분석</h3>
+                <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest">원본 · Grad-CAM 비교</h3>
               </div>
-              {result.gradcam_b64 ? (
-                <div className="rounded-xl overflow-hidden border border-slate-700 mb-3">
-                  <img
-                    src={`data:image/png;base64,${result.gradcam_b64}`}
-                    alt="Grad-CAM"
-                    className="w-full h-52 object-cover"
-                  />
+              <div className="grid grid-cols-2 gap-3 mb-4">
+                {/* 원본 이미지 */}
+                <div>
+                  <p className="text-[10px] text-slate-500 text-center mb-1.5 font-semibold uppercase tracking-wider">원본</p>
+                  {result.original_b64 ? (
+                    <div className="rounded-xl overflow-hidden border border-slate-700">
+                      <img
+                        src={`data:image/png;base64,${result.original_b64}`}
+                        alt="원본 이미지"
+                        className="w-full h-44 object-cover"
+                      />
+                    </div>
+                  ) : (
+                    <div className="rounded-xl overflow-hidden border border-slate-700">
+                      <img
+                        src={preview}
+                        alt="원본 이미지"
+                        className="w-full h-44 object-cover"
+                      />
+                    </div>
+                  )}
                 </div>
-              ) : (
-                <div className="rounded-xl bg-slate-800/50 border border-slate-700 h-52 flex items-center justify-center mb-3">
-                  <p className="text-slate-600 text-sm">Grad-CAM 이미지 없음</p>
+                {/* Grad-CAM 히트맵 */}
+                <div>
+                  <p className="text-[10px] text-slate-500 text-center mb-1.5 font-semibold uppercase tracking-wider">Grad-CAM</p>
+                  {result.gradcam_b64 ? (
+                    <div className="rounded-xl overflow-hidden border border-amber-700/40">
+                      <img
+                        src={`data:image/png;base64,${result.gradcam_b64}`}
+                        alt="Grad-CAM 히트맵"
+                        className="w-full h-44 object-cover"
+                      />
+                    </div>
+                  ) : (
+                    <div className="rounded-xl bg-slate-800/50 border border-slate-700 h-44 flex items-center justify-center">
+                      <p className="text-slate-600 text-xs text-center px-2">Grad-CAM<br/>이미지 없음</p>
+                    </div>
+                  )}
                 </div>
-              )}
-              <p className="text-xs text-slate-500 text-center">AI가 진단에 집중한 병변 영역 시각화</p>
+              </div>
+              <p className="text-xs text-slate-500 text-center">빨간색/주황색 영역 = AI가 집중한 병변 부위</p>
             </div>
           </div>
 
-          {/* 임상 특징 + 권고 처치 + 가이드라인 */}
-          {result.clinical_features && (
-            <div className="glass-card rounded-2xl p-6 border border-slate-700/50">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                {/* 임상 특징 */}
-                <div>
-                  <div className="flex items-center gap-2 mb-3">
-                    <span className="w-2 h-2 rounded-full bg-blue-400" />
-                    <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest">임상 특징</h3>
-                  </div>
-                  <p className="text-sm text-slate-300 leading-relaxed">{result.clinical_features}</p>
-                </div>
-                {/* 권고 처치 */}
-                <div>
-                  <div className="flex items-center gap-2 mb-3">
-                    <span className="w-2 h-2 rounded-full bg-rose-400" />
-                    <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest">권고 처치</h3>
-                  </div>
-                  <p className="text-sm text-slate-300 leading-relaxed">{result.clinical_action}</p>
-                </div>
-                {/* 가이드라인 */}
-                <div>
-                  <div className="flex items-center gap-2 mb-3">
-                    <span className="w-2 h-2 rounded-full bg-emerald-400" />
-                    <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest">참고 가이드라인</h3>
-                  </div>
-                  <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded-lg text-xs font-bold">
-                    📋 {result.guideline}
-                  </span>
-                </div>
+          {/* Gemini Vision 판단 근거 */}
+          {result.gradcam_explanation && (
+            <div className="glass-card rounded-2xl p-6 border border-amber-500/20">
+              <div className="flex items-center gap-2 mb-4">
+                <span className="w-2 h-2 rounded-full bg-amber-400" />
+                <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest">AI 판단 근거 (Gemini Vision 분석)</h3>
+              </div>
+              <div className="flex gap-3">
+                <span className="text-amber-400 text-lg flex-shrink-0">🔍</span>
+                <p className="text-sm text-slate-300 leading-relaxed">{result.gradcam_explanation}</p>
               </div>
             </div>
           )}
@@ -418,6 +428,121 @@ export default function SkinDiseasePage() {
         </>
       )}
 
+      {/* ──── 진단 이력 상세 모달 ──── */}
+      {modalDiagnosis && (() => {
+        let r = {}
+        try { r = JSON.parse(modalDiagnosis.resultJson || '{}') } catch { void 0; }
+        const meta = TRIAGE_META[r.triage_level] || TRIAGE_META.GREEN
+        return (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
+            onClick={() => setModalDiagnosis(null)}
+          >
+            <div
+              className="relative w-full max-w-3xl max-h-[90vh] overflow-y-auto bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-slate-800/50 [&::-webkit-scrollbar-thumb]:bg-slate-600 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb:hover]:bg-slate-500"
+              onClick={e => e.stopPropagation()}
+            >
+              {/* 모달 헤더 */}
+              <div className="sticky top-0 bg-slate-900/95 backdrop-blur border-b border-slate-700 px-6 py-4 flex items-center justify-between z-10">
+                <div>
+                  <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold border mb-1 ${meta.cls}`}>
+                    {r.triage_label || '🟢 일반'}
+                  </span>
+                  <h3 className="text-lg font-black text-slate-100">{modalDiagnosis.title}</h3>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    {modalDiagnosis.createdBy} · {new Date(modalDiagnosis.createdAt).toLocaleString('ko-KR')}
+                  </p>
+                </div>
+                <button
+                  onClick={() => setModalDiagnosis(null)}
+                  className="w-8 h-8 rounded-full bg-slate-700 hover:bg-slate-600 text-slate-300 flex items-center justify-center text-sm transition-colors flex-shrink-0"
+                >✕</button>
+              </div>
+
+              <div className="p-6 space-y-6">
+                {/* 신뢰도 */}
+                {r.confidence != null && (
+                  <div>
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">신뢰도</span>
+                      <span className={`text-xl font-black ${meta.cls.split(' ')[0]}`}>{r.confidence.toFixed(1)}%</span>
+                    </div>
+                    <div className="h-2 w-full bg-slate-800 rounded-full overflow-hidden">
+                      <div className={`h-full rounded-full bg-gradient-to-r ${meta.bar}`} style={{ width: `${r.confidence}%` }} />
+                    </div>
+                  </div>
+                )}
+
+                {/* 원본 vs GradCAM */}
+                {(r.original_b64 || r.gradcam_b64) && (
+                  <div>
+                    <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">원본 · Grad-CAM</p>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <p className="text-[10px] text-slate-500 text-center mb-1.5 font-semibold uppercase tracking-wider">원본</p>
+                        {r.original_b64
+                          ? <img src={`data:image/png;base64,${r.original_b64}`} alt="원본" className="w-full h-48 object-cover rounded-xl border border-slate-700" />
+                          : <div className="h-48 rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-center"><p className="text-slate-600 text-xs">이미지 없음</p></div>
+                        }
+                      </div>
+                      <div>
+                        <p className="text-[10px] text-slate-500 text-center mb-1.5 font-semibold uppercase tracking-wider">Grad-CAM</p>
+                        {r.gradcam_b64
+                          ? <img src={`data:image/png;base64,${r.gradcam_b64}`} alt="GradCAM" className="w-full h-48 object-cover rounded-xl border border-amber-700/40" />
+                          : <div className="h-48 rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-center"><p className="text-slate-600 text-xs">이미지 없음</p></div>
+                        }
+                      </div>
+                    </div>
+                    <p className="text-xs text-slate-500 text-center mt-2">빨간색/주황색 영역 = AI가 집중한 병변 부위</p>
+                  </div>
+                )}
+
+                {/* AI 판단 근거 */}
+                {r.gradcam_explanation && (
+                  <div className="bg-amber-500/5 border border-amber-500/20 rounded-xl p-4 flex gap-3">
+                    <span className="text-amber-400 text-lg flex-shrink-0">🔍</span>
+                    <p className="text-sm text-slate-300 leading-relaxed">{r.gradcam_explanation}</p>
+                  </div>
+                )}
+
+                {/* Top 3 */}
+                {r.top3?.length > 0 && (
+                  <div>
+                    <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">감별 진단 Top 3</p>
+                    <div className="space-y-3">
+                      {r.top3.map((c, i) => (
+                        <div key={i}>
+                          <div className="flex justify-between items-center mb-1">
+                            <div className="flex items-center gap-2">
+                              <span className={`w-5 h-5 rounded-full text-[10px] font-black flex items-center justify-center ${i === 0 ? 'bg-rose-500/20 text-rose-400' : 'bg-slate-700 text-slate-400'}`}>{i + 1}</span>
+                              <span className={`text-sm font-semibold ${i === 0 ? 'text-slate-100' : 'text-slate-400'}`}>{c.disease_ko}</span>
+                            </div>
+                            <span className={`text-sm font-bold ${i === 0 ? 'text-rose-400' : 'text-slate-500'}`}>{c.confidence.toFixed(1)}%</span>
+                          </div>
+                          <div className="h-1.5 w-full bg-slate-800 rounded-full overflow-hidden">
+                            <div className={`h-full rounded-full ${i === 0 ? 'bg-gradient-to-r from-rose-600 to-pink-400' : 'bg-slate-600'}`} style={{ width: `${c.confidence}%` }} />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* AI 리포트 */}
+                {r.report && (
+                  <div>
+                    <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">AI 진단 리포트</p>
+                    <pre className="text-sm text-slate-300 leading-relaxed whitespace-pre-wrap font-mono bg-slate-950/60 rounded-xl p-4 border border-slate-700/50 overflow-x-auto">
+                      {r.report}
+                    </pre>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )
+      })()}
+
       {/* ──── 분석 이력 테이블 ──── */}
       <section className="glass-card rounded-2xl p-6 border border-slate-700/50">
         <div className="flex justify-between items-center mb-6">
@@ -451,7 +576,11 @@ export default function SkinDiseasePage() {
               </thead>
               <tbody>
                 {diagnoses.map(d => (
-                  <tr key={d.id} className="border-b border-slate-800/50 hover:bg-slate-800/30 transition-colors">
+                  <tr
+                    key={d.id}
+                    onClick={() => setModalDiagnosis(d)}
+                    className="border-b border-slate-800/50 hover:bg-slate-800/30 transition-colors cursor-pointer"
+                  >
                     <td className="py-3 px-3 font-semibold text-slate-200">{d.title}</td>
                     <td className="py-3 px-3 text-slate-400 max-w-xs truncate">{d.summary}</td>
                     <td className="py-3 px-3 text-slate-500 text-xs">{d.createdBy || '-'}</td>
@@ -460,7 +589,7 @@ export default function SkinDiseasePage() {
                     </td>
                     <td className="py-3 px-3 text-right">
                       <span className="px-2.5 py-1 bg-rose-500/10 text-rose-400 border border-rose-500/20 rounded-full text-[10px] font-bold uppercase">
-                        Completed
+                        상세보기
                       </span>
                     </td>
                   </tr>
