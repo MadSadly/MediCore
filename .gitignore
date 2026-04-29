@@ -40,4 +40,6 @@ MS_run_all.bat
 out/
 build/
 .gradle/
+# exe
+MS_run_all.bat
 

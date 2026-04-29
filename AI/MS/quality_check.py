@@ -1,9 +1,9 @@
 import cv2
 import numpy as np
 
-SHARPNESS_THRESHOLD = 80.0   # Laplacian variance 기준
-BRIGHTNESS_MIN = 30.0         # 너무 어두움
-BRIGHTNESS_MAX = 225.0        # 너무 밝음 (과노출)
+SHARPNESS_THRESHOLD = 30.0   # Laplacian variance 기준 (낮을수록 관대)
+BRIGHTNESS_MIN = 20.0         # 너무 어두움
+BRIGHTNESS_MAX = 240.0        # 너무 밝음 (과노출)
 
 
 def check_quality(image_bytes: bytes) -> dict:
