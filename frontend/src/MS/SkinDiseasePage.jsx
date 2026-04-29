@@ -6,19 +6,10 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { useParams } from 'react-router-dom'
 import axios from 'axios'
 
-const HIGH_RISK = ['악성흑색종', '기저세포암', '편평세포암', '보웬병']
-const MEDIUM_RISK = ['광선각화증', '화농 육아종']
-
-function getRisk(diseaseKo) {
-  if (HIGH_RISK.includes(diseaseKo)) return 'high'
-  if (MEDIUM_RISK.includes(diseaseKo)) return 'medium'
-  return 'low'
-}
-
-const RISK_META = {
-  high:   { label: '⚠️ 고위험',  cls: 'text-red-400 bg-red-500/10 border-red-500/20' },
-  medium: { label: '⚡ 중위험',  cls: 'text-amber-400 bg-amber-500/10 border-amber-500/20' },
-  low:    { label: '✅ 저위험',  cls: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20' },
+const TRIAGE_META = {
+  RED:    { cls: 'text-red-400 bg-red-500/10 border-red-500/20',         bar: 'from-red-600 to-rose-400' },
+  YELLOW: { cls: 'text-amber-400 bg-amber-500/10 border-amber-500/20',   bar: 'from-amber-600 to-yellow-400' },
+  GREEN:  { cls: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20', bar: 'from-emerald-600 to-green-400' },
 }
 
 export default function SkinDiseasePage() {
@@ -252,10 +243,10 @@ export default function SkinDiseasePage() {
                 </div>
                 <div className="flex-1 min-w-0">
                   {(() => {
-                    const risk = getRisk(result.disease_ko)
+                    const meta = TRIAGE_META[result.triage_level] || TRIAGE_META.GREEN
                     return (
-                      <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold border mb-3 ${RISK_META[risk].cls}`}>
-                        {RISK_META[risk].label}
+                      <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold border mb-3 ${meta.cls}`}>
+                        {result.triage_label || '🟢 일반'}
                       </span>
                     )
                   })()}
@@ -266,11 +257,13 @@ export default function SkinDiseasePage() {
               <div>
                 <div className="flex justify-between items-center mb-2">
                   <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">신뢰도</span>
-                  <span className="text-2xl font-black text-rose-400">{result.confidence.toFixed(1)}%</span>
+                  <span className={`text-2xl font-black ${(TRIAGE_META[result.triage_level] || TRIAGE_META.GREEN).cls.split(' ')[0]}`}>
+                    {result.confidence.toFixed(1)}%
+                  </span>
                 </div>
                 <div className="h-2.5 w-full bg-slate-800 rounded-full overflow-hidden">
                   <div
-                    className="h-full rounded-full bg-gradient-to-r from-rose-600 to-pink-400 transition-all duration-700"
+                    className={`h-full rounded-full bg-gradient-to-r transition-all duration-700 ${(TRIAGE_META[result.triage_level] || TRIAGE_META.GREEN).bar}`}
                     style={{ width: `${result.confidence}%` }}
                   />
                 </div>
@@ -299,6 +292,40 @@ export default function SkinDiseasePage() {
               <p className="text-xs text-slate-500 text-center">AI가 진단에 집중한 병변 영역 시각화</p>
             </div>
           </div>
+
+          {/* 임상 특징 + 권고 처치 + 가이드라인 */}
+          {result.clinical_features && (
+            <div className="glass-card rounded-2xl p-6 border border-slate-700/50">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                {/* 임상 특징 */}
+                <div>
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="w-2 h-2 rounded-full bg-blue-400" />
+                    <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest">임상 특징</h3>
+                  </div>
+                  <p className="text-sm text-slate-300 leading-relaxed">{result.clinical_features}</p>
+                </div>
+                {/* 권고 처치 */}
+                <div>
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="w-2 h-2 rounded-full bg-rose-400" />
+                    <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest">권고 처치</h3>
+                  </div>
+                  <p className="text-sm text-slate-300 leading-relaxed">{result.clinical_action}</p>
+                </div>
+                {/* 가이드라인 */}
+                <div>
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="w-2 h-2 rounded-full bg-emerald-400" />
+                    <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest">참고 가이드라인</h3>
+                  </div>
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded-lg text-xs font-bold">
+                    📋 {result.guideline}
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Top 3 감별진단 + 임상 참고 */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
