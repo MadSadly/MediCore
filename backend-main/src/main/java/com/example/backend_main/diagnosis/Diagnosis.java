@@ -39,4 +39,9 @@ public class Diagnosis {
     @Column(nullable = false, updatable = false)
     @Builder.Default
     private LocalDateTime createdAt = LocalDateTime.now();
+
+    @PrePersist
+    private void prePersist() {
+    if (createdAt == null) createdAt = LocalDateTime.now();
+}
 }

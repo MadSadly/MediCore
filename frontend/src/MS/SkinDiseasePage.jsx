@@ -33,9 +33,10 @@ export default function SkinDiseasePage() {
 
   // 이 환자의 피부질환 진단 이력 로드
   useEffect(() => {
-    axios.get(`/api/patients/${id}/diagnoses`, { headers: authHeaders })
+    const tok = localStorage.getItem('token')
+    axios.get(`/api/patients/${id}/diagnoses`, { headers: { Authorization: `Bearer ${tok}` } })
       .then(res => setDiagnoses(res.data.filter(d => d.diseaseType === 'skin-disease')))
-      .catch(() => {})
+      .catch(() => { /* ignore */ })
       .finally(() => setLoadingHist(false))
   }, [id])
 
@@ -430,7 +431,7 @@ export default function SkinDiseasePage() {
       {/* ──── 진단 이력 상세 모달 ──── */}
       {modalDiagnosis && (() => {
         let r = {}
-        try { r = JSON.parse(modalDiagnosis.resultJson || '{}') } catch {}
+        try { r = JSON.parse(modalDiagnosis.resultJson || '{}') } catch (_e) { /* ignore */ }
         const meta = TRIAGE_META[r.triage_level] || TRIAGE_META.GREEN
         return (
           <div
