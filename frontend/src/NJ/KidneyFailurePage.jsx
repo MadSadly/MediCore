@@ -29,11 +29,14 @@ const RECOMMENDATIONS = {
 }
 
 const FIELDS = [
-  { key: 'sc',   label: '크레아티닌', unit: 'mg/dL',  normal: '0.7~1.2', min: 0.7, max: 1.2,  placeholder: '예: 4.20' },
-  { key: 'egfr', label: 'GFR',       unit: 'mL/min', normal: '≥ 90',    min: 90,  max: 9999, placeholder: '예: 18.0' },
-  { key: 'bu',   label: 'BUN',       unit: 'mg/dL',  normal: '7~20',    min: 7,   max: 20,   placeholder: '예: 45.0' },
-  { key: 'pot',  label: '칼륨',      unit: 'mEq/L',  normal: '3.5~5.0', min: 3.5, max: 5.0,  placeholder: '예: 5.80' },
-  { key: 'al',   label: '알부민',    unit: 'g/dL',   normal: '3.5~5.0', min: 3.5, max: 5.0,  placeholder: '예: 3.8'  },
+  { key: 'sc',   label: '크레아티닌',  unit: 'mg/dL',  normal: '0.7~1.2', min: 0.7,  max: 1.2,  placeholder: '예: 4.20', tag: 'Core'   },
+  { key: 'egfr', label: 'GFR',        unit: 'mL/min', normal: '≥ 90',    min: 90,   max: 9999, placeholder: '예: 18.0', tag: 'Core'   },
+  { key: 'bu',   label: 'BUN',        unit: 'mg/dL',  normal: '7~20',    min: 7,    max: 20,   placeholder: '예: 45.0', tag: 'Alert'  },
+  { key: 'pot',  label: '칼륨',       unit: 'mEq/L',  normal: '3.5~5.0', min: 3.5,  max: 5.0,  placeholder: '예: 5.80', tag: 'Alert'  },
+  { key: 'al',   label: '알부민',     unit: 'g/dL',   normal: '3.5~5.0', min: 3.5,  max: 5.0,  placeholder: '예: 3.8',  tag: 'Core'   },
+  { key: 'bp',   label: '혈압',       unit: 'mmHg',   normal: '< 130',   min: 0,    max: 130,  placeholder: '예: 140',  tag: 'Core'   },
+  { key: 'bgr',  label: '혈당',       unit: 'mg/dL',  normal: '70~140',  min: 70,   max: 140,  placeholder: '예: 180',  tag: 'Core'   },
+  { key: 'hemo', label: '헤모글로빈', unit: 'g/dL',   normal: '12~17',   min: 12,   max: 17,   placeholder: '예: 10.5', tag: 'Comp'   },
 ]
 
 function getGfrStage(gfr) {
@@ -101,7 +104,7 @@ export default function KidneyFailurePage() {
   const { id: patientId } = useParams()
 
   const [screen, setScreen]   = useState('input')
-  const [form, setForm]       = useState({ sc: '', egfr: '', bu: '', pot: '', al: '', htn: false, dm: false, pe: false, query: '' })
+  const [form, setForm]       = useState({ sc: '', egfr: '', bu: '', pot: '', al: '', bp: '', bgr: '', hemo: '', htn: false, dm: false, pe: false, query: '' })
   const [result, setResult]   = useState(null)
   const [error, setError]     = useState(null)
   const [saving, setSaving]   = useState(false)
@@ -119,6 +122,9 @@ export default function KidneyFailurePage() {
         bu:    form.bu   ? parseFloat(form.bu)   : null,
         pot:   form.pot  ? parseFloat(form.pot)  : null,
         al:    form.al   ? parseFloat(form.al)   : null,
+        bp:    form.bp   ? parseFloat(form.bp)   : null,
+        bgr:   form.bgr  ? parseFloat(form.bgr)  : null,
+        hemo:  form.hemo ? parseFloat(form.hemo) : null,
         htn:   form.htn  ? 'yes' : 'no',
         dm:    form.dm   ? 'yes' : 'no',
         pe:    form.pe   ? 'yes' : 'no',
@@ -183,10 +189,14 @@ export default function KidneyFailurePage() {
               <div className="grid grid-cols-2 gap-4">
                 {FIELDS.map(f => {
                   const warn = form[f.key] !== '' && isOutOfRange(form[f.key], f.min, f.max)
+                  const tagColor = f.tag === 'Core' ? 'text-blue-400 bg-blue-500/10' : f.tag === 'Alert' ? 'text-red-400 bg-red-500/10' : 'text-slate-400 bg-slate-700/50'
                   return (
-                    <div key={f.key} className={f.key === 'al' ? 'col-span-2' : ''}>
+                    <div key={f.key}>
                       <div className="flex justify-between items-center mb-1.5">
-                        <label className="text-xs font-semibold text-slate-300">{f.label}</label>
+                        <div className="flex items-center gap-2">
+                          <label className="text-xs font-semibold text-slate-300">{f.label}</label>
+                          <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold ${tagColor}`}>{f.tag}</span>
+                        </div>
                         <span className="text-[10px] text-slate-500">정상 {f.normal} {f.unit}</span>
                       </div>
                       <div className="relative">
@@ -382,7 +392,7 @@ export default function KidneyFailurePage() {
               {/* 입력 수치 요약 */}
               <div className="bg-[#151921] border border-slate-800 rounded-2xl p-5">
                 <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-4">입력 수치 요약</p>
-                <div className="grid grid-cols-5 gap-3">
+                <div className="grid grid-cols-4 gap-3">
                   {FIELDS.map(f => {
                     if (!form[f.key]) return null
                     const out = isOutOfRange(form[f.key], f.min, f.max)

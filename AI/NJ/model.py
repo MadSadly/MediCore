@@ -85,6 +85,35 @@ STAGE_INFO = {
 }
 
 
+# ── 피처 중요도 가중치 ────────────────────────────────────────────
+# Core+Alert ★★★★★ → 2.5  |  Complication ★★★★ → 1.5  |  Others → 1.0
+# 이론적 분산 기여 비율: Core+Alert 약 73%, 나머지 약 27%
+FEATURE_WEIGHTS = {
+    # Core (신장 기능 + 핵심 원인)
+    'sc':  2.5,   # 크레아티닌
+    'al':  2.5,   # 알부민
+    'bp':  2.5,   # 혈압
+    'bgr': 2.5,   # 혈당
+    'dm':  2.5,   # 당뇨
+    'htn': 2.5,   # 고혈압
+    # Alert (위험 감지)
+    'pot': 2.5,   # 칼륨
+    'bu':  2.5,   # BUN
+    # Complication
+    'hemo': 1.5,  # 헤모글로빈
+    'pe':   1.5,  # 부종
+    # Others: 기본값 1.0
+}
+
+
+def apply_feature_weights(X: np.ndarray, feature_cols: list) -> np.ndarray:
+    X = X.copy()
+    for i, col in enumerate(feature_cols):
+        w = FEATURE_WEIGHTS.get(col, 1.0)
+        X[:, i] *= w
+    return X
+
+
 def assign_stage(egfr: float) -> str:
     if pd.isna(egfr):  return 'Normal_Stage1'
     if egfr >= 90:     return 'Normal_Stage1'
@@ -139,6 +168,9 @@ def preprocess(df, fit=True,
     else:
         X = imputer.transform(X)
         X = scaler.transform(X)
+
+    # 우선순위 피처 가중치 적용 (StandardScaler 이후)
+    X = apply_feature_weights(X, feature_cols)
 
     y = None
     if TARGET_COL in df.columns:
@@ -286,6 +318,7 @@ class KidneyPredictor:
         X = df[self.feature_cols].values.astype(np.float32)
         X = self.imputer.transform(X)
         X = self.scaler.transform(X)
+        X = apply_feature_weights(X, self.feature_cols)
 
         pred_idx   = self.model.predict(X)[0]
         pred_proba = self.model.predict_proba(X)[0]
