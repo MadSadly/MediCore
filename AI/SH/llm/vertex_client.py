@@ -5,9 +5,13 @@ AI/SH/llm/vertex_client.py
 담당: 홍승현 (SH)
 """
 
+import logging
 import os
+
 import vertexai
 from vertexai.generative_models import GenerativeModel
+
+logger = logging.getLogger(__name__)
 
 
 _initialized = False
@@ -40,7 +44,13 @@ def _init_vertex():
             "GCP 프로젝트 ID가 설정되지 않았습니다. "
             "GOOGLE_CLOUD_PROJECT 또는 GCP_PROJECT_ID 중 하나를 .env 등에 설정하세요."
         )
-    vertexai.init(project=project, location=_region())
+    region = _region()
+    vertexai.init(project=project, location=region)
+    logger.info(
+        "Vertex AI 초기화 완료 | 프로젝트: %s | 리전: %s",
+        project,
+        region,
+    )
     _initialized = True
 
 
