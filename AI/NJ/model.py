@@ -63,7 +63,7 @@ KAGGLE_TO_STD = {
     'Estimated Glomerular Filtration Rate (eGFR)': 'egfr',
 }
 
-# ── 피처 (eGFR 제외) ──────────────────────────────────────────
+# ── 피처 ──────────────────────────────────────────────────────
 NUMERIC_COLS = [
     'age', 'bp', 'sg', 'al', 'su', 'bgr', 'bu', 'sc',
     'sod', 'pot', 'hemo', 'pcv', 'wc', 'rc', 'egfr',
@@ -249,7 +249,7 @@ class KidneyPredictor:
                 "먼저 python model.py 로 학습하세요."
             )
         with open(MODEL_PATH,  'rb') as f: self.model        = pickle.load(f)
-        with open(SCALER_PATH, 'wb') as f: self.scaler       = pickle.load(f)
+        with open(SCALER_PATH, 'rb') as f: self.scaler       = pickle.load(f)
         with open(IMPUTER_PATH,'rb') as f: self.imputer      = pickle.load(f)
         with open(ENCODER_PATH,'rb') as f:
             enc = pickle.load(f)
@@ -259,8 +259,7 @@ class KidneyPredictor:
         print("✅ 신부전 모델 로드 완료")
 
     def predict(self, input_data: dict) -> dict:
-        data = {k: v for k, v in input_data.items()
-                if k != 'egfr'}
+        data = dict(input_data)
 
         df = pd.DataFrame([data])
 

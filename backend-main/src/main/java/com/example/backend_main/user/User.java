@@ -6,7 +6,13 @@ import lombok.*;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "users")
+@Table(
+    name = "users",
+    uniqueConstraints = @UniqueConstraint(
+        name = "uq_users_hospital_employee",
+        columnNames = {"hospital_code", "employee_number"}
+    )
+)
 @Getter
 @Setter
 @NoArgsConstructor
@@ -26,6 +32,12 @@ public class User {
 
     @Column(nullable = false)
     private String password;
+
+    @Column(name = "hospital_code", length = 20)
+    private String hospitalCode;
+
+    @Column(name = "employee_number", length = 30)
+    private String employeeNumber;
 
     @Column(nullable = false, length = 50)
     @Builder.Default
