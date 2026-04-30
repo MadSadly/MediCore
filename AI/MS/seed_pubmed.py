@@ -14,13 +14,24 @@ PubMed 논문 + Gemini 임상 요약 기반 의학 지식 DB 삽입 스크립트
 seed_knowledge.py(Gemini 합성 지식)와 함께 실행하면 RAG 품질이 극대화됩니다.
 """
 
+import io
 import json
 import os
+import ssl
+import sys
 import time
 import xml.etree.ElementTree as ET
 import urllib.parse
 import urllib.request
 from pathlib import Path
+
+# Windows cp949 터미널 한글/특수문자 깨짐 방지
+sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
+
+# 사내 프록시 환경 SSL 인증서 검증 우회
+_SSL_CTX = ssl.create_default_context()
+_SSL_CTX.check_hostname = False
+_SSL_CTX.verify_mode = ssl.CERT_NONE
 
 from dotenv import load_dotenv
 
@@ -85,7 +96,7 @@ def pubmed_search(disease_en: str, topic_keywords: str) -> list[str]:
         "sort":    "relevance",
     })
     try:
-        with urllib.request.urlopen(f"{NCBI_BASE}/esearch.fcgi?{params}", timeout=10) as r:
+        with urllib.request.urlopen(f"{NCBI_BASE}/esearch.fcgi?{params}", timeout=10, context=_SSL_CTX) as r:
             data = json.loads(r.read())
             return data["esearchresult"]["idlist"]
     except Exception as e:
@@ -103,7 +114,7 @@ def pubmed_fetch(pmids: list[str]) -> list[dict]:
         "rettype": "abstract",
     })
     try:
-        with urllib.request.urlopen(f"{NCBI_BASE}/efetch.fcgi?{params}", timeout=15) as r:
+        with urllib.request.urlopen(f"{NCBI_BASE}/efetch.fcgi?{params}", timeout=15, context=_SSL_CTX) as r:
             return _parse_pubmed_xml(r.read())
     except Exception as e:
         print(f"    PubMed fetch 오류: {e}")
