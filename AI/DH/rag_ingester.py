@@ -120,7 +120,7 @@ def ingest_data_to_pgvector():
         conn = psycopg2.connect(
             host="localhost",
             port="5432",
-            dbname="medicore",
+            dbname="medicoredb",
             user="medicore",
             password="ekagus"
         )

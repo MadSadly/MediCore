@@ -1,4 +1,4 @@
-package com.medicore.dh;
+package com.example.backend_main.DH;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -24,7 +24,7 @@ public class SpineDiagnosisController {
             log.info("요청 수신 - 파일명: {}, 문진데이터: {}", file.getOriginalFilename(), clinicalData);
 
             // Service 호출하여 분석 및 DB 저장 수행
-            SpineDiagnosis result = spineDiagnosisService.analyzeAndSave(file, clinicalData);
+            SpineDiagnosisHistory result = spineDiagnosisService.analyzeAndSave(file, clinicalData);
 
             // React로 저장된 엔티티 정보(최종 결과) 반환
             return ResponseEntity.ok(result);

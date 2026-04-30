@@ -30,4 +30,3 @@ CREATE TABLE spine_diagnosis (
 
                                  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
-

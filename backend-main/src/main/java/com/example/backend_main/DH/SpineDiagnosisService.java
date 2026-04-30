@@ -1,5 +1,6 @@
-package com.medicore.dh;
+package com.example.backend_main.DH;
 
+import org.springframework.stereotype.Service;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -8,7 +9,6 @@ import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
-import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
@@ -25,7 +25,7 @@ public class SpineDiagnosisService {
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Transactional
-    public SpineDiagnosis analyzeAndSave(MultipartFile file, String clinicalData) throws Exception {
+    public SpineDiagnosisHistory analyzeAndSave(MultipartFile file, String clinicalData) throws Exception {
         // 1. Python AI 서버 주소 (FastAPI 라우터 설정에 맞춤)
         String aiServerUrl = "http://localhost:8000/api/dh/spine/analyze";
 
@@ -65,16 +65,17 @@ public class SpineDiagnosisService {
         log.info("✅ AI 분석 완료 및 응답 수신 성공!");
 
         // 5. DB 엔티티 생성 및 데이터 매핑
-        SpineDiagnosis diagnosis = new SpineDiagnosis();
+        SpineDiagnosisHistory diagnosis = new SpineDiagnosisHistory();
 
         // 이미지 저장 로직이 있다면 여기서 S3 URL 등을 매핑 (현재는 파일명으로 임시 대체)
-        diagnosis.setImageUrl(file.getOriginalFilename());
+        diagnosis.setMriImagePath(file.getOriginalFilename());
 
         // JsonNode를 String으로 변환하여 DB에 저장
-        diagnosis.setVisionAnalysisJson(objectMapper.writeValueAsString(aiResult.getVisionAnalysis()));
-        diagnosis.setClinicalDataJson(clinicalData);
-        diagnosis.setMedicalNote(aiResult.getMedicalNote());
-        diagnosis.setFinal_report(aiResult.getFinalReport());
+        diagnosis.setMriImagePath(file.getOriginalFilename());
+        diagnosis.setDlVisionResult(objectMapper.writeValueAsString(aiResult.getVisionAnalysis()));
+        diagnosis.setClinicalSymptoms(clinicalData);
+        diagnosis.setLlmMedicalNote(aiResult.getMedicalNote());
+        diagnosis.setLlmFinalReport(aiResult.getFinalReport());
 
         // 6. DB에 최종 저장 (JPA save)
         return repository.save(diagnosis);

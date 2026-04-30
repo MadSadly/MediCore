@@ -11,7 +11,7 @@ class AgentState(TypedDict):
     medical_note: str      # 의학적 소견
     final_report: str      # 환자용 최종 리포트
 
-llm = ChatGeminiAI(model="gemini-2.0-flash")
+llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash")
 
 # 3. 노드 함수들 정의 (프롬프트 변경)
 def analyze_data(state: AgentState):

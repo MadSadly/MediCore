@@ -1,4 +1,4 @@
-package com.medicore.dh;
+package com.example.backend_main.DH;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.JsonNode;
