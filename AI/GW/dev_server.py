@@ -14,5 +14,9 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], all
 
 app.include_router(router)
 
+@app.get("/health")
+def health():
+    return {"status": "ok", "server": "FastAPI", "module": "colon"}
+
 if __name__ == "__main__":
     uvicorn.run("GW.dev_server:app", host="0.0.0.0", port=8000, reload=True)

@@ -1,8 +1,7 @@
-from fastapi import APIRouter, HTTPException
-from .schemas import TrainResponse, PredictionRequest, PredictionResponse, HealthResponse
-from .model import ColonCancerModel
-from .rag_engine import ColonRAGEngine
-import pandas as pd
+from fastapi import APIRouter, HTTPException, BackgroundTasks
+from GW.model import ColonCancerModel
+from GW.rag_engine import ColonRAGEngine
+from GW.schemas import TrainResponse, PredictionRequest, PredictionResponse, HealthResponse
 
 router = APIRouter(tags=["colon"])
 model_manager = ColonCancerModel()
@@ -31,20 +30,30 @@ async def train_model():
 
 @router.post("/ai/colon/diagnose", response_model=PredictionResponse)
 async def diagnose(request: PredictionRequest):
-    # 실제 환경에서는 request.features를 DataFrame으로 변환하는 로직 필요
-    # 여기서는 예시로 RAG 엔진 호출만 보여줌
     try:
-        # pred_class, prob = model_manager.predict(request.features)
-        pred_class, prob = "Yes", 0.85 # 더미 결과
+        logger.info(f"[COLON] Diagnosis requested. Input size: {len(request.features)}")
+        
+        # 4. 상담 단계: 모델 로드 및 예측
+        pred_class, prob = model_manager.predict(request.features)
+        
+        # LLM 소견서 생성 (예측 데이터 포함)
+        input_summary = f"입력 데이터: {request.features}"
+        prediction_text = "위험(사망 가능성 높음)" if pred_class == 1 else "안전(생존 가능성 높음)"
+        
+        query = f"""
+        환자 예측 결과: {prediction_text}
+        예측 확률(위험도): {prob*100:.2f}%
+        {input_summary}
+        """
         
         advice = await rag_engine.get_advice(
-            query=f"대장암 예측 결과가 {pred_class}이며 확률이 {prob:.2f}인 환자를 위한 조언",
-            module="colon" # GW 모듈 태깅 필수
+            query=query,
+            module="colon"
         )
         
         return {
-            "prediction": pred_class,
-            "probability": prob,
+            "prediction": str(pred_class),
+            "probability": float(prob),
             "advice": advice
         }
     except Exception as e:
