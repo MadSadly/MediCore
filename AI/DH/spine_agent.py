@@ -1,7 +1,7 @@
 import os
 from typing import TypedDict, Annotated
 from langgraph.graph import StateGraph, END
-from langchain_google_genai import ChatGeminiAI
+from langchain_google_genai import ChatGoogleGenerativeAI
 
 # 1. 상태(State) 정의: 문진표 데이터(clinical_data) 추가
 class AgentState(TypedDict):
