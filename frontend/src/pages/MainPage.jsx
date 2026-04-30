@@ -1,49 +1,58 @@
 import { useEffect, useState, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import axios from 'axios'
-import { Users, Clock, CheckCircle, FileText, Filter, ChevronLeft, ChevronRight, Search, X } from 'lucide-react'
+import { Users, Clock, CheckCircle, Activity, ChevronLeft, ChevronRight, Search, X } from 'lucide-react'
 
-const COLOR = {
-  blue:    { dot: 'bg-blue-500',    bg: 'bg-blue-900/20',    border: 'border-blue-800/30',    avatar: 'bg-blue-600/10 text-blue-400 border-blue-600/20' },
-  purple:  { dot: 'bg-purple-500',  bg: 'bg-purple-900/20',  border: 'border-purple-800/30',  avatar: 'bg-purple-600/10 text-purple-400 border-purple-600/20' },
-  emerald: { dot: 'bg-emerald-500', bg: 'bg-emerald-900/20', border: 'border-emerald-800/30', avatar: 'bg-emerald-600/10 text-emerald-400 border-emerald-600/20' },
-  amber:   { dot: 'bg-amber-500',   bg: 'bg-amber-900/20',   border: 'border-amber-800/30',   avatar: 'bg-amber-600/10 text-amber-400 border-amber-600/20' },
-}
 
 const STATS = [
-  { label: '전체 환자', icon: Users,        iconColor: 'text-blue-500',    bg: 'bg-blue-600/10'    },
-  { label: '진료 대기', icon: Clock,        iconColor: 'text-amber-500',   bg: 'bg-amber-600/10'   },
-  { label: '진료 완료', icon: CheckCircle,  iconColor: 'text-emerald-500', bg: 'bg-emerald-600/10' },
-  { label: 'AI 분석',   icon: FileText,     iconColor: 'text-blue-400',    bg: 'bg-blue-600/10'    },
+  { label: '전체 환자',   icon: Users,       iconColor: 'text-blue-500',    bg: 'bg-blue-600/10'    },
+  { label: '진료 대기',   icon: Clock,       iconColor: 'text-amber-500',   bg: 'bg-amber-600/10'   },
+  { label: '진료 완료',   icon: CheckCircle, iconColor: 'text-emerald-500', bg: 'bg-emerald-600/10' },
+  { label: 'AI 진단 모듈', icon: Activity,   iconColor: 'text-purple-400',  bg: 'bg-purple-600/10'  },
 ]
 
 const PAGE_SIZE = 10
+
+const STATUS_META = {
+  WAITING: { label: '진료 대기', cls: 'bg-amber-500/10 text-amber-400 border border-amber-500/30' },
+  DONE:    { label: '진료 완료', cls: 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30' },
+}
 
 export default function MainPage() {
   const navigate = useNavigate()
   const user = JSON.parse(localStorage.getItem('user') || '{}')
   const [patients, setPatients]   = useState([])
+  const [statuses, setStatuses]   = useState({})   // { uid: 'WAITING' | 'DONE' }
   const [loading, setLoading]     = useState(true)
   const [query, setQuery]         = useState('')
+  const [statusFilter, setStatusFilter] = useState('ALL')
   const [page, setPage]           = useState(1)
 
   useEffect(() => {
     const token = localStorage.getItem('token')
-    axios.get('/api/patients', { headers: { Authorization: `Bearer ${token}` } })
-      .then(res => setPatients(res.data))
+    const headers = { Authorization: `Bearer ${token}` }
+    Promise.all([
+      axios.get('/api/patients', { headers }),
+      axios.get('/api/patients/statuses', { headers }),
+    ])
+      .then(([pRes, sRes]) => {
+        setPatients(pRes.data)
+        setStatuses(sRes.data)
+      })
       .catch(() => setPatients([]))
       .finally(() => setLoading(false))
   }, [])
 
-  // 검색 필터 — 이름 또는 환자번호
+  // 검색 + 상태 필터
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
-    if (!q) return patients
-    return patients.filter(p =>
-      p.name?.toLowerCase().includes(q) ||
-      p.uid?.toLowerCase().includes(q)
-    )
-  }, [patients, query])
+    return patients.filter(p => {
+      const matchText = !q || p.name?.toLowerCase().includes(q) || p.uid?.toLowerCase().includes(q)
+      const st = statuses[p.uid] || 'WAITING'
+      const matchStatus = statusFilter === 'ALL' || st === statusFilter
+      return matchText && matchStatus
+    })
+  }, [patients, query, statuses, statusFilter])
 
   // 페이지네이션
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
@@ -54,12 +63,10 @@ export default function MainPage() {
     setPage(1) // 검색 시 첫 페이지로
   }
 
-  const statValues = [
-    patients.length,
-    patients.filter(p => p.status === 'WAITING').length || '-',
-    patients.filter(p => p.status === 'DONE').length    || '-',
-    '-',
-  ]
+  const waitingCount = Object.values(statuses).filter(s => s === 'WAITING').length
+  const doneCount    = Object.values(statuses).filter(s => s === 'DONE').length
+
+  const statValues = [patients.length, waitingCount, doneCount, 6]
 
   return (
     <div className="max-w-[1400px] mx-auto space-y-8">
@@ -100,8 +107,18 @@ export default function MainPage() {
             )}
           </div>
 
-          {/* 검색창 */}
+          {/* 검색창 + 상태 필터 */}
           <div className="flex items-center gap-3 w-full sm:w-auto">
+            {/* 상태 필터 */}
+            <select
+              value={statusFilter}
+              onChange={e => { setStatusFilter(e.target.value); setPage(1) }}
+              className="py-2 px-3 bg-slate-800 border border-slate-700 rounded-lg text-sm text-slate-300 focus:outline-none focus:border-blue-500 transition-colors cursor-pointer"
+            >
+              <option value="ALL">전체 상태</option>
+              <option value="WAITING">진료 대기</option>
+              <option value="DONE">진료 완료</option>
+            </select>
             <div className="relative flex-1 sm:w-72">
               <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
               <input
@@ -120,9 +137,6 @@ export default function MainPage() {
                 </button>
               )}
             </div>
-            <button className="flex items-center gap-2 px-4 py-2 bg-slate-800 text-slate-300 rounded-lg text-sm font-semibold hover:bg-slate-700 transition-colors whitespace-nowrap">
-              <Filter size={15} /> 필터
-            </button>
           </div>
         </div>
 
@@ -130,28 +144,29 @@ export default function MainPage() {
           <table className="w-full text-left">
             <thead>
               <tr className="bg-slate-900/30 text-slate-500 text-[11px] uppercase tracking-widest font-black">
-                {['환자번호', '환자이름', '나이', '성별', '혈액형', '최근검사일', '관리'].map((h, i) => (
-                  <th key={h} className={`px-6 py-4 ${i === 6 ? 'text-right' : ''}`}>{h}</th>
+                {['환자번호', '환자이름', '나이', '성별', '혈액형', '최근검사일', '상태', '관리'].map((h, i) => (
+                  <th key={h} className={`px-6 py-4 ${i === 7 ? 'text-right' : ''}`}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800">
               {loading ? (
                 <tr>
-                  <td colSpan={7} className="px-6 py-16 text-center">
+                  <td colSpan={8} className="px-6 py-16 text-center">
                     <div className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto" />
                   </td>
                 </tr>
               ) : paged.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-6 py-16 text-center text-slate-500">
+                  <td colSpan={8} className="px-6 py-16 text-center text-slate-500">
                     <p className="text-3xl mb-3">{query ? '🔍' : '🏥'}</p>
                     <p>{query ? `'${query}'에 해당하는 환자가 없습니다.` : '등록된 환자가 없습니다.'}</p>
                   </td>
                 </tr>
               ) : (
                 paged.map((p) => {
-                  const c = COLOR.blue
+                  const st = statuses[p.uid] || 'WAITING'
+                  const stMeta = STATUS_META[st]
                   return (
                     <tr
                       key={p.uid}
@@ -161,17 +176,17 @@ export default function MainPage() {
                     >
                       <td className="px-6 py-4 text-slate-400 font-mono text-sm">{p.uid}</td>
                       <td className="px-6 py-4">
-                        <div className="flex items-center gap-3">
-                          <div className={`w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold border ${c.avatar}`}>
-                            {p.name?.[0] || '?'}
-                          </div>
-                          <span className="font-bold text-slate-100">{p.name}</span>
-                        </div>
+                        <span className="font-bold text-slate-100">{p.name}</span>
                       </td>
                       <td className="px-6 py-4 text-slate-300">{p.age ? `${p.age}세` : '-'}</td>
                       <td className="px-6 py-4 text-slate-300">{p.gender || '-'}</td>
                       <td className="px-6 py-4 text-slate-300">{p.bloodType || '-'}</td>
                       <td className="px-6 py-4 text-slate-300">{p.lastExamDate || '-'}</td>
+                      <td className="px-6 py-4">
+                        <span className={`text-[11px] font-bold px-2.5 py-1 rounded-full ${stMeta.cls}`}>
+                          {stMeta.label}
+                        </span>
+                      </td>
                       <td className="px-6 py-4 text-right">
                         <button
                           onClick={() => navigate(`/patients/${p.uid}`)}
@@ -192,7 +207,7 @@ export default function MainPage() {
         <div className="px-8 py-4 border-t border-slate-800 flex justify-between items-center bg-slate-900/20">
           <p className="text-sm text-slate-500">
             총 {filtered.length}명
-            {query && ` (전체 ${patients.length}명 중)`}
+            {(query || statusFilter !== 'ALL') && ` (전체 ${patients.length}명 중)`}
             {' · '}행을 더블클릭하면 상세 분석 페이지로 이동합니다
           </p>
           <div className="flex items-center gap-2">
