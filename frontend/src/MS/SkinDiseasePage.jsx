@@ -26,17 +26,25 @@ export default function SkinDiseasePage() {
   const [diagnoses, setDiagnoses]     = useState([])
   const [loadingHist, setLoadingHist] = useState(true)
   const [modalDiagnosis, setModalDiagnosis] = useState(null)
+  const [patientStatus, setPatientStatus] = useState('WAITING')
 
   const fileInputRef = useRef(null)
   const token = localStorage.getItem('token')
   const authHeaders = { Authorization: `Bearer ${token}` }
 
-  // 이 환자의 피부질환 진단 이력 로드
+  // 이 환자의 피부질환 진단 이력 + 진료 상태 로드
   useEffect(() => {
     const tok = localStorage.getItem('token')
-    axios.get(`/api/patients/${id}/diagnoses`, { headers: { Authorization: `Bearer ${tok}` } })
-      .then(res => setDiagnoses(res.data.filter(d => d.diseaseType === 'skin-disease')))
-      .catch(() => { /* ignore */ })
+    const headers = { Authorization: `Bearer ${tok}` }
+    Promise.all([
+      axios.get(`/api/patients/${id}/diagnoses`, { headers }),
+      axios.get(`/api/patients/${id}/status`, { headers }),
+    ])
+      .then(([dRes, sRes]) => {
+        setDiagnoses(dRes.data.filter(d => d.diseaseType === 'skin-disease'))
+        setPatientStatus(sRes.data.status || 'WAITING')
+      })
+      .catch(() => {})
       .finally(() => setLoadingHist(false))
   }, [id])
 
@@ -102,6 +110,8 @@ export default function SkinDiseasePage() {
         createdAt:   new Date().toISOString().slice(0, 19),
       }
       await axios.post(`/api/patients/${id}/diagnoses`, diagnosis, { headers: authHeaders })
+      // 최근 검사일 자동 업데이트
+      await axios.patch(`/api/patients/${id}/last-exam-date`, null, { headers: authHeaders })
       setSaved(true)
       const hRes = await axios.get(`/api/patients/${id}/diagnoses`, { headers: authHeaders })
       setDiagnoses(hRes.data.filter(d => d.diseaseType === 'skin-disease'))
@@ -148,8 +158,21 @@ export default function SkinDiseasePage() {
         )}
       </div>
 
-      {/* ──── 업로드 섹션 (결과가 없을 때만) ──── */}
-      {!result && (
+      {/* ──── 진료 완료 안내 배너 ──── */}
+      {patientStatus === 'DONE' && (
+        <div className="flex items-center gap-3 px-5 py-4 bg-emerald-500/10 border border-emerald-500/30 rounded-xl">
+          <svg viewBox="0 -960 960 960" width={20} height={20} fill="currentColor" className="text-emerald-400 flex-shrink-0">
+            <path d="M382-240 154-468l57-57 171 171 367-367 57 57-424 424Z"/>
+          </svg>
+          <div>
+            <p className="text-emerald-400 font-bold text-sm">진료 완료 환자입니다</p>
+            <p className="text-emerald-600 text-xs mt-0.5">의사가 진료를 완료 처리한 환자로, 신규 AI 진단이 비활성화됩니다. 기존 진단 이력은 아래에서 확인할 수 있습니다.</p>
+          </div>
+        </div>
+      )}
+
+      {/* ──── 업로드 섹션 (결과가 없을 때만, 진료 대기 환자만) ──── */}
+      {!result && patientStatus === 'WAITING' && (
         <section className="glass-card rounded-2xl p-6 border border-slate-700/50">
           <div
             onDrop={handleDrop}
