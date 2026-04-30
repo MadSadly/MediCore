@@ -64,7 +64,13 @@ export default function ColonCancerPage() {
   const [error, setError] = useState('');
   const [dataAnalysisResults, setDataAnalysisResults] = useState(null);
   const [modelTrainingResults, setModelTrainingResults] = useState(null);
-  const [predictionInput, setPredictionInput] = useState(Array(10).fill(0)); // 10 features for synthetic data
+  const [inputs, setInputs] = useState({
+    age: 65,
+    cancerStage: 'Stage III',
+    tumorSize: 45.5,
+    bmi: 28.2,
+    diabetes: 'No'
+  });
   const [predictionResult, setPredictionResult] = useState(null);
   const [diagnosisHistory, setDiagnosisHistory] = useState([]);
 
@@ -145,7 +151,7 @@ export default function ColonCancerPage() {
     try {
       const token = localStorage.getItem('token');
       const res = await axios.post(`${BACKEND_URL}/api/gw/colon/predict/${patientId}`, {
-        features: predictionInput.map(Number), // 숫자로 변환
+        ...inputs
       }, {
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -222,23 +228,43 @@ export default function ColonCancerPage() {
 
         {/* 3. 예측 및 결과 */}
         <Card title="대장암 예측" icon={PieChart}>
-          <div style={{ marginBottom: 15 }}>
-            <label style={{ display: 'block', marginBottom: 5, color: COLOR.secondary }}>예측 특성 입력 (쉼표로 구분):</label>
-            <input
-              type="text"
-              value={predictionInput.join(',')}
-              onChange={(e) => setPredictionInput(e.target.value.split(',').map(s => s.trim()))}
-              placeholder="예: 65,1,28.5,1,1,0,2.5,1,1,0"
-              style={{
-                width: '100%', padding: 10, borderRadius: 6, border: `1px solid ${COLOR.border}`,
-                background: COLOR.bg, color: COLOR.text, fontSize: 14,
-              }}
-            />
-            <p style={{ fontSize: 12, color: COLOR.dim, marginTop: 5 }}>
-              (Age, Gender, BMI, FamilyHistory, Smoking, Alcohol, DietQuality, PhysicalActivity, PolypHistory, InflammatoryBowelDisease)
-            </p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '20px' }}>
+            <div>
+              <label style={{ fontSize: '12px', color: COLOR.secondary }}>나이 (Age)</label>
+              <input type="number" value={inputs.age} 
+                onChange={e => setInputs({...inputs, age: e.target.value})}
+                style={{ width: '100%', padding: '8px', background: COLOR.bg, border: `1px solid ${COLOR.border}`, color: COLOR.text }} />
+            </div>
+            <div>
+              <label style={{ fontSize: '12px', color: COLOR.secondary }}>암 단계 (Cancer Stage)</label>
+              <select value={inputs.cancerStage} 
+                onChange={e => setInputs({...inputs, cancerStage: e.target.value})}
+                style={{ width: '100%', padding: '8px', background: COLOR.bg, border: `1px solid ${COLOR.border}`, color: COLOR.text }}>
+                <option>Stage I</option><option>Stage II</option><option>Stage III</option><option>Stage IV</option>
+              </select>
+            </div>
+            <div>
+              <label style={{ fontSize: '12px', color: COLOR.secondary }}>종양 크기 (Tumor Size mm)</label>
+              <input type="number" value={inputs.tumorSize} 
+                onChange={e => setInputs({...inputs, tumorSize: e.target.value})}
+                style={{ width: '100%', padding: '8px', background: COLOR.bg, border: `1px solid ${COLOR.border}`, color: COLOR.text }} />
+            </div>
+            <div>
+              <label style={{ fontSize: '12px', color: COLOR.secondary }}>비만도 (BMI)</label>
+              <input type="number" value={inputs.bmi} 
+                onChange={e => setInputs({...inputs, bmi: e.target.value})}
+                style={{ width: '100%', padding: '8px', background: COLOR.bg, border: `1px solid ${COLOR.border}`, color: COLOR.text }} />
+            </div>
+            <div>
+              <label style={{ fontSize: '12px', color: COLOR.secondary }}>당뇨 여부 (Diabetes)</label>
+              <select value={inputs.diabetes} 
+                onChange={e => setInputs({...inputs, diabetes: e.target.value})}
+                style={{ width: '100%', padding: '8px', background: COLOR.bg, border: `1px solid ${COLOR.border}`, color: COLOR.text }}>
+                <option>Yes</option><option>No</option>
+              </select>
+            </div>
           </div>
-          <Button onClick={handlePrediction} disabled={loading || !modelTrainingResults} primary icon={BrainCircuit}>
+          <Button onClick={handlePrediction} disabled={loading} primary icon={BrainCircuit}>
             {loading ? <Spinner /> : '예측 실행'}
           </Button>
           {predictionResult && (
@@ -252,9 +278,12 @@ export default function ColonCancerPage() {
                 )}
               </p>
               <p style={{ color: COLOR.secondary, marginTop: 5 }}>
-                확률: <span style={{ fontWeight: 600 }}>{(predictionResult.probability * 100).toFixed(2)}%</span>
+                사망 위험 확률: <span style={{ fontWeight: 600, color: COLOR.warning }}>{(predictionResult.probability * 100).toFixed(2)}%</span>
               </p>
-              <p style={{ color: COLOR.secondary, fontSize: 12, marginTop: 10 }}>{predictionResult.message}</p>
+              <div style={{ marginTop: 15, padding: 15, background: COLOR.dim, borderRadius: 8 }}>
+                <h5 style={{ margin: '0 0 10px 0', color: COLOR.primary }}>AI 상담 소견</h5>
+                <p style={{ fontSize: 13, lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{predictionResult.advice}</p>
+              </div>
             </div>
           )}
         </Card>
