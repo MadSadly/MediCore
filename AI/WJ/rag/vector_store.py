@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 load_dotenv(Path(__file__).resolve().parents[3] / ".env")
 from psycopg2.extras import execute_values
 
-EMBEDDING_DIM = 1024  # 실제 테이블 vector(1024)에 맞춤
+EMBEDDING_DIM = 768  # V7/V13 마이그레이션으로 768차원으로 통일
 MODULE_NAME = "brain"
 
 _CREATE_EXTENSION = "CREATE EXTENSION IF NOT EXISTS vector;"
