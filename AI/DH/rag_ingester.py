@@ -116,13 +116,24 @@ def ingest_data_to_pgvector():
 
     # [3/4] PostgreSQL 연결
     print("💾 [3/4] PostgreSQL 데이터베이스 연결 중...")
+
+    # 환경 변수에서 DB 정보 가져오기 (비밀번호 누락 시 에러 발생)
+    db_host = os.getenv("DB_HOST", "localhost")
+    db_port = os.getenv("DB_PORT", "5432")
+    db_name = os.getenv("DB_NAME", "medicoredb")
+    db_user = os.getenv("DB_USER", "medicore")
+    db_password = os.getenv("DB_PASSWORD")
+
+    if not db_password:
+        raise ValueError("❌ .env 파일에 DB_PASSWORD가 설정되지 않았습니다!")
+
     try:
         conn = psycopg2.connect(
-            host="localhost",
-            port="5432",
-            dbname="medicoredb",
-            user="medicore",
-            password="ekagus"
+            host=db_host,
+            port=db_port,
+            dbname=db_name,
+            user=db_user,
+            password=db_password
         )
         cursor = conn.cursor()
 
