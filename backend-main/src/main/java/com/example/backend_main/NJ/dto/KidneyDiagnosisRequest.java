@@ -14,5 +14,6 @@ public class KidneyDiagnosisRequest {
     private String description;
     private String severity;
     private boolean dialysisRequired;
+    private Double egfr;
     private Map<String, Double> probabilities;
 }

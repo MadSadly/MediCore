@@ -39,6 +39,57 @@ const FIELDS = [
 ]
 
 // CKD-EPI 2021 (race-free) eGFR 자동 계산
+function calcSlope(history) {
+  const pts = history
+    .map(h => ({ t: new Date(h.createdAt).getTime(), e: parseFloat(h.egfr) }))
+    .filter(p => !isNaN(p.e) && p.e > 0)
+  if (pts.length < 2) return null
+  const t0 = pts[0].t
+  const MS_PER_MONTH = 1000 * 60 * 60 * 24 * 30.44
+  const normed = pts.map(p => ({ t: (p.t - t0) / MS_PER_MONTH, e: p.e }))
+  const n = normed.length
+  const sumT  = normed.reduce((s, p) => s + p.t, 0)
+  const sumE  = normed.reduce((s, p) => s + p.e, 0)
+  const sumTE = normed.reduce((s, p) => s + p.t * p.e, 0)
+  const sumT2 = normed.reduce((s, p) => s + p.t * p.t, 0)
+  const denom = n * sumT2 - sumT * sumT
+  if (Math.abs(denom) < 1e-9) return 0
+  return (n * sumTE - sumT * sumE) / denom
+}
+
+function getTrendInfo(slope) {
+  if (slope === null) return null
+  if (slope > 0)   return { label: '호전 중',      color: 'text-emerald-400', bg: 'bg-emerald-500/10 border-emerald-500/20' }
+  if (slope > -2)  return { label: '안정',          color: 'text-blue-400',    bg: 'bg-blue-500/10 border-blue-500/20' }
+  if (slope > -5)  return { label: '완만한 악화',   color: 'text-yellow-400',  bg: 'bg-yellow-500/10 border-yellow-500/20' }
+  return               { label: '급격한 악화',   color: 'text-red-400',     bg: 'bg-red-500/10 border-red-500/20' }
+}
+
+function EgfrSparkline({ history }) {
+  const pts = history.filter(h => parseFloat(h.egfr) > 0)
+  if (pts.length < 2) return null
+  const vals = pts.map(h => parseFloat(h.egfr))
+  const minV = Math.min(...vals)
+  const maxV = Math.max(...vals)
+  const range = maxV - minV || 1
+  const W = 160, H = 40, PAD = 4
+  const points = vals.map((v, i) => {
+    const x = PAD + (i / (vals.length - 1)) * (W - PAD * 2)
+    const y = PAD + (1 - (v - minV) / range) * (H - PAD * 2)
+    return `${x},${y}`
+  }).join(' ')
+  return (
+    <svg width={W} height={H} className="w-full">
+      <polyline points={points} fill="none" stroke="#3b82f6" strokeWidth="1.5" strokeLinejoin="round" />
+      {vals.map((v, i) => {
+        const x = PAD + (i / (vals.length - 1)) * (W - PAD * 2)
+        const y = PAD + (1 - (v - minV) / range) * (H - PAD * 2)
+        return <circle key={i} cx={x} cy={y} r="2.5" fill="#3b82f6" />
+      })}
+    </svg>
+  )
+}
+
 function calcEgfr(sc, age, sex) {
   const scr = parseFloat(sc)
   const a   = parseFloat(age)
@@ -123,6 +174,7 @@ export default function KidneyFailurePage() {
   const [screen, setScreen]   = useState('input')
   const [form, setForm]       = useState({ sc: '', bu: '', pot: '', al: '', bp: '', bgr: '', hemo: '', age: '', sex: 'M', htn: false, dm: false, pe: false, query: '' })
   const [result, setResult]   = useState(null)
+  const [history, setHistory] = useState([])
   const [error, setError]     = useState(null)
   const [saving, setSaving]   = useState(false)
   const [saved, setSaved]     = useState(false)
@@ -151,6 +203,15 @@ export default function KidneyFailurePage() {
       })
       setResult(data)
       setScreen('result')
+      // 추세용 이력 조회 (실패해도 무시)
+      try {
+        const token = localStorage.getItem('token')
+        const { data: hist } = await axios.get(
+          `/api/patients/${patientId}/diagnoses/kidney/history`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        )
+        setHistory(hist)
+      } catch { /* history is optional */ }
     } catch (e) {
       setError(e.response?.data?.detail || e.message || 'AI 서버 연결 실패')
       setScreen('input')
@@ -168,6 +229,7 @@ export default function KidneyFailurePage() {
         description:      result.description,
         severity:         result.severity,
         dialysisRequired: result.dialysis_required,
+        egfr:             computedEgfr,
         probabilities:    result.probabilities,
       }, { headers: { Authorization: `Bearer ${token}` } })
       setSaved(true)
@@ -576,6 +638,38 @@ export default function KidneyFailurePage() {
                   )}
                 </div>
               </div>
+
+              {/* eGFR 추세 */}
+              {(() => {
+                const slope = calcSlope(history)
+                const trend = getTrendInfo(slope)
+                return (
+                  <div className="bg-[#151921] border border-slate-800 rounded-2xl p-5">
+                    <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-3">eGFR 추세</p>
+                    {history.filter(h => parseFloat(h.egfr) > 0).length < 2 ? (
+                      <p className="text-[11px] text-slate-600 text-center py-3">
+                        진단 기록이 2회 이상 저장되면<br />추세가 표시됩니다
+                      </p>
+                    ) : (
+                      <div className="space-y-3">
+                        <EgfrSparkline history={history} />
+                        <div className="flex items-center justify-between">
+                          <span className={`text-[10px] px-2 py-1 rounded border font-bold ${trend.bg} ${trend.color}`}>
+                            {trend.label}
+                          </span>
+                          <span className={`text-xs font-bold ${trend.color}`}>
+                            월 {slope >= 0 ? '+' : ''}{slope.toFixed(1)} mL/min
+                          </span>
+                        </div>
+                        <div className="flex justify-between text-[9px] text-slate-600">
+                          <span>{new Date(history[0].createdAt).toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' })}</span>
+                          <span>{new Date(history[history.length - 1].createdAt).toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' })}</span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )
+              })()}
 
               {/* 단계별 확률 */}
               <div className="bg-[#151921] border border-slate-800 rounded-2xl p-5">
