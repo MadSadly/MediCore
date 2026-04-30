@@ -1,7 +1,7 @@
 import os
 from typing import TypedDict, Annotated
 from langgraph.graph import StateGraph, END
-from langchain_google_genai import ChatGeminiAI
+from langchain_google_genai import ChatGoogleGenerativeAI
 
 # 1. 상태(State) 정의: 문진표 데이터(clinical_data) 추가
 class AgentState(TypedDict):
@@ -11,7 +11,7 @@ class AgentState(TypedDict):
     medical_note: str      # 의학적 소견
     final_report: str      # 환자용 최종 리포트
 
-llm = ChatGeminiAI(model="gemini-2.0-flash")
+llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash")
 
 # 3. 노드 함수들 정의 (프롬프트 변경)
 def analyze_data(state: AgentState):
