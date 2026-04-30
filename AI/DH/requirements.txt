@@ -1,8 +1,10 @@
-pip install torch torchvision timm
+
 pip install langgraph langchain-google-genai
+pip install fastapi uvicorn python-multipart
+pip install llama-parse langchain langchain-google-genai chromadb python-dotenv
+pip install psycopg2-binary
+pip install google-genai
+pip install llama-parse psycopg2-binary
+pip install -U langchain langchain-core langchain-google-genai langgraph
 pip install --upgrade langgraph langchain-core
-
-
-//이건 내꺼아니고 wj꺼 같데... 깔아줘야 실행댐
-pip install monai
-nibabel
+pip install torch torchvision timm

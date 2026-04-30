@@ -10,3 +10,6 @@ CREATE TABLE IF NOT EXISTS diagnoses (
 );
 
 CREATE INDEX idx_diagnoses_patient_uid ON diagnoses(patient_uid);
+
+
+
