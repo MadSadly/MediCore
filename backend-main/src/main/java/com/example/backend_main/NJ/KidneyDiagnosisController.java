@@ -25,15 +25,38 @@ public class KidneyDiagnosisController {
             @RequestBody KidneyDiagnosisRequest req,
             Authentication auth
     ) {
-        String egfrPart = req.getEgfr() != null
-                ? String.format(",\"egfr\":%.1f", req.getEgfr())
-                : "";
+        ObjectMapper om = new ObjectMapper();
+        Map<String, Object> resultMap = new LinkedHashMap<>();
 
-        String resultJson = String.format(
-            "{\"result\":\"%s\",\"confidence\":%.4f,\"description\":\"%s\",\"severity\":\"%s\",\"dialysisRequired\":%b%s}",
-            req.getResult(), req.getConfidence(), req.getDescription(),
-            req.getSeverity(), req.isDialysisRequired(), egfrPart
-        );
+        // 진단 결과
+        resultMap.put("result",           req.getResult());
+        resultMap.put("confidence",       req.getConfidence());
+        resultMap.put("description",      req.getDescription());
+        resultMap.put("severity",         req.getSeverity());
+        resultMap.put("dialysisRequired", req.isDialysisRequired());
+        if (req.getProbabilities() != null) resultMap.put("probabilities", req.getProbabilities());
+
+        // 임상 수치
+        if (req.getEgfr()  != null) resultMap.put("egfr",  req.getEgfr());
+        if (req.getSc()    != null) resultMap.put("sc",    req.getSc());
+        if (req.getBu()    != null) resultMap.put("bu",    req.getBu());
+        if (req.getPot()   != null) resultMap.put("pot",   req.getPot());
+        if (req.getAl()    != null) resultMap.put("al",    req.getAl());
+        if (req.getBp()    != null) resultMap.put("bp",    req.getBp());
+        if (req.getBgr()   != null) resultMap.put("bgr",   req.getBgr());
+        if (req.getHemo()  != null) resultMap.put("hemo",  req.getHemo());
+
+        // 동반 증상
+        if (req.getHtn() != null) resultMap.put("htn", req.getHtn());
+        if (req.getDm()  != null) resultMap.put("dm",  req.getDm());
+        if (req.getPe()  != null) resultMap.put("pe",  req.getPe());
+
+        String resultJson;
+        try {
+            resultJson = om.writeValueAsString(resultMap);
+        } catch (Exception e) {
+            resultJson = "{}";
+        }
 
         Diagnosis diagnosis = Diagnosis.builder()
                 .patientUid(patientUid)
@@ -59,14 +82,13 @@ public class KidneyDiagnosisController {
         for (Diagnosis d : all) {
             if (!"kidney".equals(d.getDiseaseType())) continue;
             Map<String, Object> entry = new LinkedHashMap<>();
-            entry.put("id", d.getId());
+            entry.put("id",        d.getId());
             entry.put("createdAt", d.getCreatedAt().toString());
             try {
-                Map<?, ?> json = om.readValue(d.getResultJson(), Map.class);
-                entry.put("egfr", json.get("egfr"));
-                entry.put("result", json.get("result"));
+                @SuppressWarnings("unchecked")
+                Map<String, Object> json = om.readValue(d.getResultJson(), Map.class);
+                entry.putAll(json);
             } catch (Exception e) {
-                entry.put("egfr", null);
                 entry.put("result", null);
             }
             history.add(entry);
