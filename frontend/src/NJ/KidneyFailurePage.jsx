@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useParams } from 'react-router-dom'
 import axios from 'axios'
 
@@ -180,7 +180,7 @@ export default function KidneyFailurePage() {
   const [saving, setSaving]         = useState(false)
   const [saved, setSaved]           = useState(false)
 
-  const fetchHistory = async () => {
+  const fetchHistory = useCallback(async () => {
     try {
       const token = localStorage.getItem('token')
       const { data } = await axios.get(
@@ -189,9 +189,9 @@ export default function KidneyFailurePage() {
       )
       setHistory(data.slice().reverse())
     } catch { /* optional */ }
-  }
+  }, [patientId])
 
-  useEffect(() => { fetchHistory() }, [patientId])
+  useEffect(() => { fetchHistory() }, [fetchHistory])
 
   const computedEgfr = calcEgfr(form.sc, form.age, form.sex)
   const previewStage = getGfrStage(computedEgfr)
@@ -637,8 +637,8 @@ export default function KidneyFailurePage() {
                     신뢰도 {(result.confidence * 100).toFixed(1)}%
                   </span>
                 </div>
-                <div className="bg-[#0d1117] rounded-xl p-4 text-sm text-slate-300 leading-relaxed border border-slate-800 whitespace-pre-wrap">
-                  {result.rag_answer}
+                <div className="bg-[#0d1117] rounded-xl p-4 border border-slate-800">
+                  <pre className="text-xs text-slate-300 leading-relaxed font-mono whitespace-pre-wrap break-words">{result.rag_answer}</pre>
                 </div>
                 {result.rag_sources && result.rag_sources.length > 0 && (
                   <div className="flex items-center gap-1.5 mt-2 flex-wrap">
