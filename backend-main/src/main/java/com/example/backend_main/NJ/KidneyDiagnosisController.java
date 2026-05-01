@@ -3,6 +3,7 @@ package com.example.backend_main.NJ;
 import com.example.backend_main.NJ.dto.KidneyDiagnosisRequest;
 import com.example.backend_main.diagnosis.Diagnosis;
 import com.example.backend_main.diagnosis.DiagnosisRepository;
+import com.example.backend_main.patient.PatientRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -10,6 +11,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDate;
 import java.util.*;
 
 @RestController
@@ -18,6 +20,7 @@ import java.util.*;
 public class KidneyDiagnosisController {
 
     private final DiagnosisRepository diagnosisRepository;
+    private final PatientRepository    patientRepository;
 
     @PostMapping
     public ResponseEntity<Diagnosis> create(
@@ -67,8 +70,15 @@ public class KidneyDiagnosisController {
                 .createdBy(auth != null ? auth.getName() : null)
                 .build();
 
-        return ResponseEntity.status(HttpStatus.CREATED)
-                .body(diagnosisRepository.save(diagnosis));
+        Diagnosis saved = diagnosisRepository.save(diagnosis);
+
+        // DiagnosisInterceptor는 /diagnoses/** 경로를 감청하지 않으므로 직접 갱신
+        patientRepository.findByUid(patientUid).ifPresent(p -> {
+            p.setLastExamDate(LocalDate.now());
+            patientRepository.save(p);
+        });
+
+        return ResponseEntity.status(HttpStatus.CREATED).body(saved);
     }
 
     @GetMapping("/history")
