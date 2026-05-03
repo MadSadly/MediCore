@@ -29,7 +29,11 @@ out/
 build/
 .gradle/
 .idea/
+<<<<<<< HEAD
 =======
 
 *.joblib
 >>>>>>> 2fe29ece033650043457d4f054459a45ec9e6158
+=======
+.pdf
+>>>>>>> bc7523cb027dde9dcc909d7d0ce653f0cf28338a

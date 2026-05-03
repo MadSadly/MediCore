@@ -43,11 +43,13 @@ export default function SpineDiskPage() {
     "Subarticular Stenosis": { "Normal_Mild": 0.03, "Moderate": 0.03, "Severe": 0.04 }
   };
 
+  /*
   const chartData = Object.keys(detailedResults).map(key => ({
     name: key.split(' ')[0],
     value: Math.max(...Object.values(detailedResults[key])) * 100,
     color: key === "Spinal Canal Stenosis" ? '#fbbf24' : '#10b981'
   }));
+*/
 
   const handleUpload = (e) => {
     const file = e.target.files[0];

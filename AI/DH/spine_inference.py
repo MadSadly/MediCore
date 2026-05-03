@@ -1,7 +1,7 @@
 import torch
 import numpy as np
 from PIL import Image
-from spine_model import load_spine_model  # 방금 만든 파일에서 함수 가져오기
+from DH.spine_model import load_spine_model
 
 # ---------------------------------------------------------
 # 1. 이미지 전처리 함수 (Pre-processing)
