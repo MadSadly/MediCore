@@ -626,6 +626,47 @@ export default function KidneyFailurePage() {
                 )}
               </div>
 
+              {/* AI 진단 근거 · 피처 기여도 */}
+              {result.feature_importance && Object.keys(result.feature_importance).length > 0 && (() => {
+                const entries = Object.entries(result.feature_importance)
+                const maxVal = entries[0]?.[1] ?? 1
+                return (
+                  <div className="bg-[#151921] border border-slate-800 rounded-2xl p-5">
+                    <div className="flex items-center gap-2 mb-4">
+                      <div className="w-5 h-5 rounded bg-violet-600/20 border border-violet-500/30 flex items-center justify-center">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-violet-400"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+                      </div>
+                      <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">AI 진단 근거 · 피처 기여도</p>
+                    </div>
+                    <div className="space-y-2">
+                      {entries.map(([feat, val], i) => {
+                        const pct = maxVal > 0 ? (val / maxVal) * 100 : 0
+                        const barColor = i < 3
+                          ? 'bg-violet-500'
+                          : i < 6
+                          ? 'bg-violet-500/60'
+                          : 'bg-violet-500/30'
+                        return (
+                          <div key={feat} className="flex items-center gap-2">
+                            <span className="text-[10px] text-slate-400 w-20 flex-shrink-0 text-right truncate">{feat}</span>
+                            <div className="flex-1 h-3 bg-slate-800 rounded-full overflow-hidden">
+                              <div
+                                className={`h-full rounded-full transition-all ${barColor}`}
+                                style={{ width: `${pct}%` }}
+                              />
+                            </div>
+                            <span className="text-[10px] text-slate-500 w-10 flex-shrink-0 text-right">
+                              {(val * 100).toFixed(1)}%
+                            </span>
+                          </div>
+                        )
+                      })}
+                    </div>
+                    <p className="text-[9px] text-slate-600 mt-3">TabNet Attention 기반 · 해당 예측에서 각 피처가 기여한 상대적 비중</p>
+                  </div>
+                )
+              })()}
+
               {/* AI 진단 의견 */}
               <div className="bg-[#151921] border border-slate-800 rounded-2xl p-5">
                 <div className="flex items-center gap-2 mb-4">

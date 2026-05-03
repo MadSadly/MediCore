@@ -187,15 +187,23 @@ async def kidney_diagnose(req: KidneyDiagnoseRequest):
         input_data = req.dict(exclude={"query"}),
     )
 
+    # 4. 피처 기여도
+    try:
+        feature_importance = predictor.explain(clinical_data)
+    except Exception as e:
+        logger.warning(f"피처 기여도 계산 실패: {e}")
+        feature_importance = None
+
     return KidneyDiagnoseResponse(
-        module            = "kidney",
-        prediction        = prediction,
-        confidence        = dl_result["confidence"],
-        description       = dl_result["description"],
-        severity          = dl_result["severity"],
-        dialysis_required = dl_result["dialysis_required"],
-        probabilities     = dl_result["probabilities"],
-        alerts            = alerts,
-        rag_answer        = rag_result["answer"],
-        rag_sources       = rag_result["sources"],
+        module             = "kidney",
+        prediction         = prediction,
+        confidence         = dl_result["confidence"],
+        description        = dl_result["description"],
+        severity           = dl_result["severity"],
+        dialysis_required  = dl_result["dialysis_required"],
+        probabilities      = dl_result["probabilities"],
+        alerts             = alerts,
+        rag_answer         = rag_result["answer"],
+        rag_sources        = rag_result["sources"],
+        feature_importance = feature_importance,
     )

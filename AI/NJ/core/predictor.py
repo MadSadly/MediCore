@@ -76,6 +76,35 @@ FEATURE_COLS = NUMERIC_COLS + CATEGORICAL_COLS
 TARGET_COL   = 'ckd_stage'
 STAGE_LABELS = ['Normal_Stage1', 'Stage2', 'Stage3', 'Stage4', 'Stage5']
 
+# ── 피처 한국어 레이블 ─────────────────────────────────────────
+FEATURE_LABELS_KO = {
+    'age':   '나이',
+    'bp':    '혈압',
+    'sg':    '요비중',
+    'al':    '알부민(소변)',
+    'su':    '요당',
+    'bgr':   '혈당',
+    'bu':    'BUN',
+    'sc':    '크레아티닌',
+    'sod':   '나트륨',
+    'pot':   '칼륨',
+    'hemo':  '헤모글로빈',
+    'pcv':   '적혈구 용적률',
+    'wc':    '백혈구 수',
+    'rc':    '적혈구 수',
+    'egfr':  'eGFR',
+    'rbc':   '요 적혈구',
+    'pc':    '농뇨구',
+    'pcc':   '농뇨구 응괴',
+    'ba':    '세균뇨',
+    'htn':   '고혈압',
+    'dm':    '당뇨',
+    'cad':   '관상동맥질환',
+    'appet': '식욕',
+    'pe':    '부종',
+    'ane':   '빈혈',
+}
+
 STAGE_INFO = {
     'Normal_Stage1': {'desc': '정상 또는 CKD 1단계 (eGFR ≥ 90)',        'severity': 'normal',   'dialysis': False},
     'Stage2':        {'desc': 'CKD 2단계 - 경미한 신기능 저하 (60~89)',  'severity': 'mild',     'dialysis': False},
@@ -258,10 +287,9 @@ class KidneyPredictor:
             self.feature_cols  = enc['features']
         print("✅ 신부전 모델 로드 완료")
 
-    def predict(self, input_data: dict) -> dict:
-        data = dict(input_data)
-
-        df = pd.DataFrame([data])
+    def _preprocess_input(self, input_data: dict) -> np.ndarray:
+        """입력 데이터를 모델 추론 형태로 전처리."""
+        df = pd.DataFrame([dict(input_data)])
 
         for col in NUMERIC_COLS:
             if col in df.columns:
@@ -269,9 +297,7 @@ class KidneyPredictor:
 
         for col in CATEGORICAL_COLS:
             if col in df.columns and col in self.cat_encoders:
-                df[col] = (df[col].astype(str)
-                                   .str.strip()
-                                   .str.lower())
+                df[col] = df[col].astype(str).str.strip().str.lower()
                 enc = self.cat_encoders[col]
                 df[col] = df[col].map(
                     lambda x: enc.transform([x])[0]
@@ -285,7 +311,10 @@ class KidneyPredictor:
         X = df[self.feature_cols].values.astype(np.float32)
         X = self.imputer.transform(X)
         X = self.scaler.transform(X)
+        return X
 
+    def predict(self, input_data: dict) -> dict:
+        X          = self._preprocess_input(input_data)
         pred_idx   = self.model.predict(X)[0]
         pred_proba = self.model.predict_proba(X)[0]
         prediction = self.label_encoder.classes_[pred_idx]
@@ -300,10 +329,28 @@ class KidneyPredictor:
             "dialysis_required": info['dialysis'],
             "probabilities": {
                 cls: round(float(p), 4)
-                for cls, p in zip(
-                    self.label_encoder.classes_, pred_proba)
+                for cls, p in zip(self.label_encoder.classes_, pred_proba)
             },
         }
+
+    def explain(self, input_data: dict) -> dict[str, float]:
+        """TabNet Attention 기반 피처 기여도 계산 — 상위 10개 반환."""
+        X = self._preprocess_input(input_data)
+        M_explain, _ = self.model.explain(X)
+        importance = M_explain[0]
+
+        total = importance.sum()
+        if total > 0:
+            importance = importance / total
+
+        scores = {
+            FEATURE_LABELS_KO.get(col, col): round(float(importance[i]), 4)
+            for i, col in enumerate(self.feature_cols)
+            if i < len(importance)
+        }
+        return dict(
+            sorted(scores.items(), key=lambda x: x[1], reverse=True)[:10]
+        )
 
 
 if __name__ == "__main__":
