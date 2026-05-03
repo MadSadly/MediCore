@@ -21,19 +21,29 @@ public class ColonService {
 
     @Transactional
     public Map<String, Object> predictAndSave(String patientUid, Map<String, Object> inputs) throws Exception {
-        // 1. AI 모델에 맞게 23개 피처로 확장 (사용자 입력 5개 + 기본값 18개)
+        // 1. AI 모델 피처 매핑 (사용자 입력 5종 + 기본값 18종 = 총 23개)
         List<Object> features = new ArrayList<>();
-        features.add(inputs.get("age"));                    // Age
+        
+        // Cancer Stage 문자열을 숫자로 변환 (모델 입력을 위한 전처리)
+        Object rawStage = inputs.get("cancerStage");
+        int stageNum = 1;
+        if (rawStage != null) {
+            if (rawStage.toString().contains("II")) stageNum = 2;
+            if (rawStage.toString().contains("III")) stageNum = 3;
+            if (rawStage.toString().contains("IV")) stageNum = 4;
+        }
+
+        features.add(inputs.get("age"));                    // 1. Age
         features.add("Male");                               // Gender (Default)
-        features.add(inputs.get("cancerStage"));            // Cancer_Stage
-        features.add(inputs.get("tumorSize"));              // Tumor_Size_mm
+        features.add(stageNum);                             // 3. Cancer_Stage
+        features.add(inputs.get("tumorSize"));              // 4. Tumor_Size_mm
         features.add("No");                                 // Family_History
         features.add("No");                                 // Smoking_History
         features.add("No");                                 // Alcohol_Consumption
-        features.add(inputs.get("bmi"));                    // Obesity_BMI
+        features.add(inputs.get("bmi"));                    // 8. Obesity_BMI
         features.add("Medium");                             // Diet_Risk
         features.add("Moderate");                           // Physical_Activity
-        features.add(inputs.get("diabetes"));               // Diabetes
+        features.add(inputs.get("diabetes"));               // 11. Diabetes
         features.add("No");                                 // IBD
         features.add("No");                                 // Genetic_Mutation
         features.add("No");                                 // Screening_History
@@ -47,7 +57,7 @@ public class ColonService {
         features.add("High");                               // Access
         features.add("Yes");                                // Insurance
 
-        // 2. AI 서버 호출
+        // 2. AI 서버(FastAPI) 호출하여 예측 수행
         Map<String, Object> aiRequest = new HashMap<>();
         aiRequest.put("features", features);
         
@@ -58,9 +68,11 @@ public class ColonService {
         Double probability = (Double) aiResponse.get("probability");
         String advice = (String) aiResponse.get("advice");
 
-        // 4. DB 저장용 JSON 생성 (입력값 + 상담내역)
+        // 4. 입력 내용, 사망률, 상담 내용을 하나의 JSON으로 통합 저장
         Map<String, Object> storageMap = new HashMap<>(inputs);
         storageMap.put("advice", advice);
+        storageMap.put("mortalityRate", probability * 100); // 백분율 저장
+        storageMap.put("predictedLabel", prediction == 1 ? "High Risk" : "Low Risk");
         String featuresJson = objectMapper.writeValueAsString(storageMap);
 
         // 5. DB 저장

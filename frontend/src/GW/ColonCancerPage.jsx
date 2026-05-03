@@ -151,7 +151,7 @@ export default function ColonCancerPage() {
     try {
       const token = localStorage.getItem('token');
       const res = await axios.post(`${BACKEND_URL}/api/gw/colon/predict/${patientId}`, {
-        ...inputs
+        age: inputs.age, cancerStage: inputs.cancerStage, tumorSize: inputs.tumorSize, bmi: inputs.bmi, diabetes: inputs.diabetes
       }, {
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -269,16 +269,16 @@ export default function ColonCancerPage() {
           </Button>
           {predictionResult && (
             <div style={{ marginTop: 20, borderTop: `1px solid ${COLOR.border}`, paddingTop: 20 }}>
-              <h4 style={{ color: COLOR.primary, marginBottom: 10 }}>예측 결과:</h4>
+              <h4 style={{ color: COLOR.primary, marginBottom: 10 }}>AI 진단 및 사망 위험 분석:</h4>
               <p style={{ fontSize: 16, fontWeight: 600, color: COLOR.text }}>
                 {predictionResult.prediction === 1 ? (
-                  <span style={{ color: COLOR.danger }}><XCircle size={18} style={{ verticalAlign: 'middle', marginRight: 5 }} />대장암 발병 위험 높음</span>
+                  <span style={{ color: COLOR.danger }}><XCircle size={18} style={{ verticalAlign: 'middle', marginRight: 5 }} />고위험군 (High Risk)</span>
                 ) : (
-                  <span style={{ color: COLOR.success }}><CheckCircle size={18} style={{ verticalAlign: 'middle', marginRight: 5 }} />대장암 발병 위험 낮음</span>
+                  <span style={{ color: COLOR.success }}><CheckCircle size={18} style={{ verticalAlign: 'middle', marginRight: 5 }} />저위험군 (Low Risk)</span>
                 )}
               </p>
               <p style={{ color: COLOR.secondary, marginTop: 5 }}>
-                사망 위험 확률: <span style={{ fontWeight: 600, color: COLOR.warning }}>{(predictionResult.probability * 100).toFixed(2)}%</span>
+                예측 사망률: <span style={{ fontWeight: 600, color: COLOR.warning }}>{(predictionResult.probability * 100).toFixed(2)}%</span>
               </p>
               <div style={{ marginTop: 15, padding: 15, background: COLOR.dim, borderRadius: 8 }}>
                 <h5 style={{ margin: '0 0 10px 0', color: COLOR.primary }}>AI 상담 소견</h5>
