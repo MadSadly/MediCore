@@ -29,6 +29,6 @@ langgraph==0.0.30
 psycopg2-binary==2.9.9
 pgvector==0.2.5
 
-# [System & Utils]
+# [System & Utils]   docker exec -it medicore-postgres psql -U medicore -d medicoredb
 psutil==5.9.8
 python-dotenv==1.0.1

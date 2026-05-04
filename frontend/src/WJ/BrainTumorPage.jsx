@@ -7,14 +7,14 @@ const AI_URL = import.meta.env.VITE_AI_URL || 'http://localhost:8000'
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8080'
 
 const C = {
-  bg:     '#0d1117',
-  panel:  '#161b22',
-  border: '#21262d',
-  text:   '#e6edf3',
-  sub:    '#8b949e',
-  dim:    '#3d444d',
-  accent: '#4da6ff',
-  hover:  '#1c2128',
+  bg:     '#080808',
+  panel:  '#121212',
+  border: '#2a2a2a',
+  text:   '#ececec',
+  sub:    '#848484',
+  dim:    '#464646',
+  accent: '#c8c8c8',
+  hover:  '#1a1a1a',
   red:    '#f87171',
   green:  '#34d399',
   yellow: '#fbbf24',
@@ -31,19 +31,22 @@ const AXIS_ICONS = {
 
 let _sid = 0
 const mkSess = (file, fileId) => ({
-  key:        String(++_sid),
+  key:               String(++_sid),
   fileId,
   file,
-  fileName:   file.name,
-  uploadedAt: new Date(),
-  viewMode:   '2d',
-  axis:       null,
-  sliceCount: 0,
-  currentIndex: 0,
-  axisCache:  {},
-  status:     'idle',
-  result:     null,
-  errorMsg:   '',
+  fileName:          file.name,
+  uploadedAt:        new Date(),
+  viewMode:          '2d',
+  axis:              null,
+  sliceCount:        0,
+  currentIndex:      0,
+  axisCache:         {},
+  highlightAxisCache: {},  // axis → highlight slice count (pre-generated at diagnosis)
+  highlightOn:       false,
+  maskReady:         false, // true when Tumor detected and mask files are ready
+  status:            'idle',
+  result:            null,
+  errorMsg:          '',
 })
 
 const Btn = ({ children, onClick, disabled, primary, style: s }) => (
@@ -53,9 +56,9 @@ const Btn = ({ children, onClick, disabled, primary, style: s }) => (
     style={{
       width: '100%', padding: '9px 12px', borderRadius: 6,
       fontSize: 13, fontWeight: 600, cursor: disabled ? 'not-allowed' : 'pointer',
-      background: disabled ? C.bg : primary ? '#0d3a5a' : C.hover,
-      border: `1px solid ${disabled ? C.border : primary ? '#1a6090' : '#30363d'}`,
-      color: disabled ? C.dim : primary ? C.accent : C.text,
+      background: disabled ? C.bg : primary ? '#d4d4d4' : C.hover,
+      border: `1px solid ${disabled ? C.border : primary ? '#d4d4d4' : '#363636'}`,
+      color: disabled ? C.dim : primary ? '#080808' : C.text,
       transition: 'all 0.15s', textAlign: 'center', ...s,
     }}
   >
@@ -90,7 +93,6 @@ export default function BrainTumorPage() {
   const [dragOver,    setDragOver]    = useState(false)
   const [diagHistory, setDiagHistory] = useState([])
 
-  // Keep ref in sync for wheel handler closure
   useEffect(() => { activeKeyRef.current = activeKey }, [activeKey])
 
   // ── 진단 기록 조회 ──
@@ -107,7 +109,7 @@ export default function BrainTumorPage() {
 
   const activeSess = sessions.find(s => s.key === activeKey) ?? null
 
-  // ── Init Niivue — phase 의존: viewer 전환 시 canvas가 DOM에 생긴 직후 실행 ──
+  // ── Init Niivue ──
   useEffect(() => {
     if (phase !== 'viewer') return
     if (!nvCanvasRef.current || nvRef.current) return
@@ -121,7 +123,7 @@ export default function BrainTumorPage() {
     nvRef.current = nv
   }, [phase])
 
-  // ── Wheel scroll on main slice area ──
+  // ── Wheel scroll ──
   useEffect(() => {
     const el = sliceViewRef.current
     if (!el) return
@@ -131,7 +133,10 @@ export default function BrainTumorPage() {
       setSessions(prev => {
         const sess = prev.find(s => s.key === key)
         if (!sess || !sess.sliceCount || sess.viewMode === '3d') return prev
-        const next = Math.max(0, Math.min(sess.sliceCount - 1, sess.currentIndex + (e.deltaY > 0 ? 1 : -1)))
+        const effCount = sess.highlightOn && sess.maskReady && sess.axis
+          ? (sess.highlightAxisCache[sess.axis] || sess.sliceCount)
+          : sess.sliceCount
+        const next = Math.max(0, Math.min(effCount - 1, sess.currentIndex + (e.deltaY > 0 ? 1 : -1)))
         return prev.map(s => s.key === key ? { ...s, currentIndex: next } : s)
       })
     }
@@ -139,7 +144,7 @@ export default function BrainTumorPage() {
     return () => el.removeEventListener('wheel', handler)
   }, [phase])
 
-  // ── Auto-scroll active thumbnail ──
+  // ── Auto-scroll thumbnail ──
   useEffect(() => {
     if (!thumbListRef.current || !activeSess) return
     const el = thumbListRef.current.querySelector(`[data-idx="${activeSess.currentIndex}"]`)
@@ -149,7 +154,7 @@ export default function BrainTumorPage() {
   const updateSess = useCallback((key, upd) =>
     setSessions(prev => prev.map(s => s.key === key ? { ...s, ...upd } : s)), [])
 
-  // ── Upload file to AI backend ──
+  // ── Upload ──
   const handleFile = async (file) => {
     if (!file) return
     const lower = file.name.toLowerCase()
@@ -177,7 +182,7 @@ export default function BrainTumorPage() {
     }
   }
 
-  // ── Generate slices for axis ──
+  // ── Normal slices ──
   const loadSlices = useCallback(async (key, fileId, axis) => {
     setSessions(prev => prev.map(s => s.key === key ? { ...s, status: 'loading-slices', axis } : s))
     try {
@@ -198,11 +203,17 @@ export default function BrainTumorPage() {
     }
   }, [])
 
-  // ── Axis button click ──
+  // ── Axis selection ──
   const handleAxis = (axis) => {
     if (!activeSess || activeSess.status === 'loading-slices') return
+
+    // Highlight 모드: 서버에 슬라이스 pre-generated → 그냥 axis 변경
+    if (activeSess.highlightOn && activeSess.maskReady) {
+      updateSess(activeSess.key, { axis, currentIndex: 0 })
+      return
+    }
+
     if (activeSess.axis === axis && activeSess.sliceCount > 0) return
-    // Restore from cache if available
     if (activeSess.axisCache?.[axis]) {
       updateSess(activeSess.key, { axis, sliceCount: activeSess.axisCache[axis], currentIndex: 0 })
       return
@@ -210,18 +221,72 @@ export default function BrainTumorPage() {
     loadSlices(activeSess.key, activeSess.fileId, axis)
   }
 
-  // ── 3D via Niivue ──
-  const handle3D = async () => {
+  // ── 3D (supports highlight) ──
+  const handle3D = async (forceHighlight) => {
     if (!activeSess?.file || !nvRef.current) return
-    const url = URL.createObjectURL(activeSess.file)
-    await nvRef.current.loadVolumes([{ url, name: activeSess.file.name }])
-    nvRef.current.setSliceType(4)
-    updateSess(activeSess.key, { viewMode: '3d' })
+    const key = activeSess.key
+    const useHL = forceHighlight !== undefined
+      ? forceHighlight
+      : (activeSess.highlightOn && activeSess.maskReady)
+
+    let volumes
+    if (useHL && activeSess.maskReady) {
+      volumes = [
+        {
+          url: `${AI_URL}/ai/brain/preprocessed/${activeSess.fileId}/preprocessed.nii`,
+          name: 'preprocessed.nii',
+          colormap: 'gray',
+          opacity: 0.35,
+        },
+        {
+          url: `${AI_URL}/ai/brain/mask/${activeSess.fileId}/mask.nii`,
+          name: 'mask.nii',
+          colormap: 'warm',
+          opacity: 0.9,
+        },
+      ]
+    } else {
+      const url = URL.createObjectURL(activeSess.file)
+      volumes = [{ url, name: activeSess.file.name, colormap: 'gray', opacity: 1.0 }]
+    }
+
+    try {
+      await nvRef.current.loadVolumes(volumes)
+      nvRef.current.setSliceType(4)
+      updateSess(key, { viewMode: '3d', errorMsg: '' })
+    } catch (err) {
+      console.error('3D 렌더링 오류:', err)
+      updateSess(key, { errorMsg: '3D 렌더링에 실패했습니다: ' + (err?.message || String(err)) })
+    }
   }
 
   const handle2D = () => {
     if (!activeSess) return
     updateSess(activeSess.key, { viewMode: '2d' })
+  }
+
+  // ── Highlight toggle ──
+  const toggleHighlight = async (on) => {
+    if (!activeSess?.maskReady) return
+
+    // highlight OFF → ON 시 axis가 없으면 아무것도 안 해도 됨 (이미지 없음)
+    // highlight ON → OFF 시 해당 axis의 normal 슬라이스가 없으면 로드
+    if (!on && activeSess.axis) {
+      const cachedCount = activeSess.axisCache[activeSess.axis]
+      if (!cachedCount) {
+        updateSess(activeSess.key, { highlightOn: false, sliceCount: 0, currentIndex: 0 })
+        loadSlices(activeSess.key, activeSess.fileId, activeSess.axis)
+        return
+      }
+      updateSess(activeSess.key, { highlightOn: false, sliceCount: cachedCount, currentIndex: 0 })
+    } else {
+      updateSess(activeSess.key, { highlightOn: on, currentIndex: 0 })
+    }
+
+    // 3D 모드면 Niivue 재로드
+    if (activeSess.viewMode === '3d' && nvRef.current) {
+      await handle3D(on)
+    }
   }
 
   // ── Tab management ──
@@ -244,7 +309,7 @@ export default function BrainTumorPage() {
     })
   }
 
-  // ── AI Diagnosis ──
+  // ── Diagnosis ──
   const handleDiagnose = async () => {
     if (!activeSess || activeSess.status === 'loading-diagnose') return
     const key = activeSess.key
@@ -252,13 +317,21 @@ export default function BrainTumorPage() {
     try {
       const form = new FormData()
       form.append('file', activeSess.file)
+      form.append('fileId', activeSess.fileId)  // 마스크 저장 위치 전달
       const token = localStorage.getItem('token')
       const res = await axios.post(
         `${AI_URL}/ai/brain/diagnose`,
         form,
         { headers: { 'Content-Type': 'multipart/form-data', ...(token ? { Authorization: `Bearer ${token}` } : {}) } },
       )
-      updateSess(key, { status: 'done', result: res.data })
+
+      const meta = res.data?.metadata || {}
+      updateSess(key, {
+        status: 'done',
+        result: res.data,
+        maskReady: meta.mask_ready === true,
+        highlightAxisCache: meta.highlight_slice_counts || {},
+      })
 
       const clf = res.data.classification
       if (clf && res.data.report) {
@@ -284,11 +357,9 @@ export default function BrainTumorPage() {
     return (
       <div style={{ minHeight: '100vh', background: C.bg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <div style={{ width: 480, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 20, padding: '40px 24px' }}>
-          <div style={{ fontSize: 52, lineHeight: 1 }}>🧠</div>
           <h2 style={{ color: C.text, fontSize: 22, fontWeight: 700, margin: 0 }}>뇌종양 MRI 분석</h2>
           <p style={{ color: C.sub, fontSize: 14, margin: 0 }}>NIfTI 파일을 업로드하여 AI 진단을 시작합니다</p>
 
-          {/* Drop zone */}
           <div
             onDragOver={e => { e.preventDefault(); setDragOver(true) }}
             onDragLeave={() => setDragOver(false)}
@@ -316,7 +387,6 @@ export default function BrainTumorPage() {
               </>
             )}
           </div>
-
         </div>
 
         <input
@@ -334,13 +404,24 @@ export default function BrainTumorPage() {
   // ════════════════════════════════
   // PHASE 2 — VIEWER SCREEN
   // ════════════════════════════════
-  const sliceUrl = activeSess?.axis && activeSess?.sliceCount > 0
-    ? `${AI_URL}/ai/brain/slices/${activeSess.fileId}/${activeSess.axis}/slice_${String(activeSess.currentIndex).padStart(3, '0')}.png`
+
+  // 현재 유효 슬라이스 수 (하이라이트 ON이면 highlight count 사용)
+  const useHighlight = activeSess?.highlightOn && activeSess?.maskReady
+  const effSliceCount = useHighlight && activeSess?.axis
+    ? (activeSess.highlightAxisCache[activeSess.axis] || activeSess.sliceCount)
+    : (activeSess?.sliceCount || 0)
+
+  const sliceUrl = activeSess?.axis && effSliceCount > 0
+    ? useHighlight
+      ? `${AI_URL}/ai/brain/highlight/${activeSess.fileId}/${activeSess.axis}/slice_${String(activeSess.currentIndex).padStart(3, '0')}.png`
+      : `${AI_URL}/ai/brain/slices/${activeSess.fileId}/${activeSess.axis}/slice_${String(activeSess.currentIndex).padStart(3, '0')}.png`
     : null
 
-  const thumbUrls = activeSess?.axis && activeSess?.sliceCount > 0
-    ? Array.from({ length: activeSess.sliceCount }, (_, i) =>
-        `${AI_URL}/ai/brain/slices/${activeSess.fileId}/${activeSess.axis}/slice_${String(i).padStart(3, '0')}.png`,
+  const thumbUrls = activeSess?.axis && effSliceCount > 0
+    ? Array.from({ length: effSliceCount }, (_, i) =>
+        useHighlight
+          ? `${AI_URL}/ai/brain/highlight/${activeSess.fileId}/${activeSess.axis}/slice_${String(i).padStart(3, '0')}.png`
+          : `${AI_URL}/ai/brain/slices/${activeSess.fileId}/${activeSess.axis}/slice_${String(i).padStart(3, '0')}.png`,
       )
     : []
 
@@ -352,6 +433,7 @@ export default function BrainTumorPage() {
   return (
     <div style={{
       display: 'flex', flexDirection: 'column',
+      height: '100%',
       background: C.bg, color: C.text,
       fontFamily: 'system-ui, -apple-system, sans-serif',
     }}>
@@ -398,33 +480,43 @@ export default function BrainTumorPage() {
       </div>
 
       {/* ════ 3-PANEL BODY ════ */}
-      <div style={{ display: 'flex', height: 560, flexShrink: 0 }}>
+      <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
 
-        {/* ── LEFT: 2D/3D + Axis ── */}
+        {/* ── LEFT: 2D/3D + Axis + Highlight ── */}
         <div style={{
           width: 116, flexShrink: 0, background: C.panel,
           borderRight: `1px solid ${C.border}`,
           display: 'flex', flexDirection: 'column',
-          padding: '10px 8px', gap: 6, overflowY: 'auto',
+          padding: '8px 6px', gap: 5, overflowY: 'auto',
         }}>
-          {/* 2D / 3D toggle */}
-          <div style={{ display: 'flex', gap: 4, marginBottom: 4 }}>
-            {['2D', '3D'].map(m => {
-              const isActive = activeSess?.viewMode === m.toLowerCase()
+          {/* 2D / 3D pill */}
+          <div style={{
+            background: C.bg, border: `1px solid ${C.border}`,
+            borderRadius: 7, padding: 3, display: 'flex', gap: 2,
+            opacity: activeSess ? 1 : 0.38, marginBottom: 2,
+          }}>
+            {[
+              { label: '2D', sub: 'SLICE', mode: '2d', fn: handle2D },
+              { label: '3D', sub: 'VOL',   mode: '3d', fn: handle3D },
+            ].map(({ label, sub, mode, fn }) => {
+              const isActive = activeSess?.viewMode === mode
               return (
                 <button
-                  key={m}
-                  onClick={() => m === '3D' ? handle3D() : handle2D()}
+                  key={mode}
+                  onClick={() => activeSess && fn()}
                   disabled={!activeSess}
                   style={{
-                    flex: 1, padding: '6px 0', fontSize: 12, fontWeight: 700,
-                    background: isActive ? '#1c4a6e' : C.hover,
-                    color: isActive ? C.accent : C.sub,
-                    border: `1px solid ${isActive ? '#2a6090' : C.border}`,
-                    borderRadius: 4, cursor: activeSess ? 'pointer' : 'not-allowed',
-                    opacity: activeSess ? 1 : 0.5,
+                    flex: 1, padding: '7px 4px', border: 'none', borderRadius: 5,
+                    background: isActive ? '#d4d4d4' : 'transparent',
+                    color: isActive ? '#080808' : C.dim,
+                    cursor: activeSess ? 'pointer' : 'default',
+                    transition: 'all 0.15s',
+                    display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1,
                   }}
-                >{m}</button>
+                >
+                  <span style={{ fontSize: 13, fontWeight: 800, letterSpacing: '0.04em' }}>{label}</span>
+                  <span style={{ fontSize: 8, fontWeight: 600, letterSpacing: '0.12em', opacity: 0.65 }}>{sub}</span>
+                </button>
               )
             })}
           </div>
@@ -440,38 +532,84 @@ export default function BrainTumorPage() {
                 key={axis}
                 onClick={() => activeSess?.viewMode !== '3d' && handleAxis(axis)}
                 style={{
-                  padding: '8px 6px', borderRadius: 6, textAlign: 'center',
+                  borderRadius: 6, overflow: 'hidden', position: 'relative',
                   cursor: activeSess && activeSess.viewMode !== '3d' ? 'pointer' : 'default',
-                  background: isActive ? '#1c3a52' : C.hover,
-                  border: `1px solid ${isActive ? '#1a5070' : C.border}`,
+                  background: '#000',
+                  border: `2px solid ${isActive ? C.accent : C.border}`,
                   opacity: activeSess && activeSess.viewMode !== '3d' ? 1 : 0.35,
+                  boxShadow: isActive ? `0 0 0 1px rgba(200,200,200,0.2)` : 'none',
+                  transition: 'border-color 0.15s, box-shadow 0.15s',
                 }}
               >
-                <p style={{
-                  fontSize: 10, letterSpacing: '0.1em', fontWeight: 600,
-                  color: isActive ? C.accent : C.sub, textTransform: 'uppercase', marginBottom: 5,
+                <img
+                  src={AXIS_ICONS[axis]}
+                  alt={axis}
+                  style={{ width: '100%', height: 90, objectFit: 'contain', display: 'block' }}
+                />
+                <div style={{
+                  position: 'absolute', bottom: 0, left: 0, right: 0,
+                  background: 'linear-gradient(transparent, rgba(0,0,0,0.88))',
+                  padding: '12px 6px 5px',
+                  textAlign: 'center',
                 }}>
-                  {axis.slice(0, 3).toUpperCase()}
-                </p>
-                <div style={{ position: 'relative', display: 'flex', justifyContent: 'center' }}>
-                  <img
-                    src={AXIS_ICONS[axis]}
-                    alt={axis}
-                    style={{ width: 60, height: 54, objectFit: 'contain', opacity: isActive ? 1 : 0.55 }}
-                  />
-                  {isLoading && (
-                    <div style={{
-                      position: 'absolute', inset: 0,
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      background: 'rgba(13,17,23,0.75)', borderRadius: 4,
-                    }}>
-                      <Spinner size={18} />
-                    </div>
-                  )}
+                  <span style={{
+                    fontSize: 11, letterSpacing: '0.14em', fontWeight: 700,
+                    color: isActive ? C.accent : 'rgba(255,255,255,0.7)',
+                    textTransform: 'uppercase',
+                  }}>
+                    {axis.slice(0, 3).toUpperCase()}
+                  </span>
                 </div>
+                {isLoading && (
+                  <div style={{
+                    position: 'absolute', inset: 0,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    background: 'rgba(13,17,23,0.75)',
+                  }}>
+                    <Spinner size={18} />
+                  </div>
+                )}
               </div>
             )
           })}
+
+          {/* ── Highlight toggle ── */}
+          <div style={{ height: 1, background: C.border, margin: '4px 0 2px' }} />
+
+          <div style={{
+            background: C.bg, border: `1px solid ${activeSess?.maskReady ? '#4a1a1a' : C.border}`,
+            borderRadius: 7, padding: 3, display: 'flex', gap: 2,
+            opacity: activeSess?.maskReady ? 1 : 0.3,
+          }}>
+            {[false, true].map(on => {
+              const isActive = activeSess?.highlightOn === on
+              return (
+                <button
+                  key={String(on)}
+                  onClick={() => activeSess?.maskReady && toggleHighlight(on)}
+                  disabled={!activeSess?.maskReady}
+                  style={{
+                    flex: 1, padding: '6px 4px', border: 'none', borderRadius: 5,
+                    background: isActive ? (on ? '#3a0808' : '#1e1e1e') : 'transparent',
+                    color: isActive ? (on ? C.red : C.text) : C.dim,
+                    cursor: activeSess?.maskReady ? 'pointer' : 'default',
+                    transition: 'all 0.15s',
+                    display: 'flex', flexDirection: 'column', alignItems: 'center',
+                  }}
+                >
+                  <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.1em' }}>
+                    {on ? 'ON' : 'OFF'}
+                  </span>
+                </button>
+              )
+            })}
+          </div>
+          <span style={{
+            fontSize: 9, fontWeight: 700, letterSpacing: '0.14em', textAlign: 'center',
+            color: activeSess?.maskReady ? (activeSess.highlightOn ? C.red : C.sub) : C.dim,
+          }}>
+            HIGHLIGHT
+          </span>
 
           {!activeSess && (
             <p style={{ fontSize: 10, color: C.dim, textAlign: 'center', marginTop: 6, lineHeight: 1.7 }}>
@@ -491,28 +629,28 @@ export default function BrainTumorPage() {
           }}>
             <span style={{ fontSize: 13, fontWeight: 600, color: C.text, letterSpacing: '0.04em' }}>
               {activeSess?.viewMode === '3d'
-                ? '3D Render'
+                ? `3D Render${useHighlight ? ' · HIGHLIGHT' : ''}`
                 : activeSess?.axis
-                  ? `${activeSess.axis.toUpperCase()} View`
+                  ? `${activeSess.axis.toUpperCase()} View${useHighlight ? ' · HIGHLIGHT' : ''}`
                   : 'BRAIN TUMOR ANALYSIS'}
             </span>
-            {activeSess?.sliceCount > 0 && activeSess.viewMode !== '3d' && (
+            {effSliceCount > 0 && activeSess?.viewMode !== '3d' && (
               <span style={{ marginLeft: 'auto', fontSize: 11, color: C.dim }}>
-                {activeSess.currentIndex + 1} / {activeSess.sliceCount}
+                {activeSess.currentIndex + 1} / {effSliceCount}
               </span>
             )}
           </div>
 
-          {/* Main image area — wheel listener attached here */}
-          <div ref={sliceViewRef} style={{ flex: 1, position: 'relative', background: '#050709', overflow: 'hidden' }}>
+          {/* Main image area */}
+          <div ref={sliceViewRef} style={{ flex: 1, position: 'relative', background: '#050505', overflow: 'hidden' }}>
 
-            {/* Niivue 3D — wrapper div controls visibility so Niivue can't escape display:none by touching canvas.style */}
-            <div style={{ position: 'absolute', inset: 0, display: activeSess?.viewMode === '3d' ? 'block' : 'none' }}>
+            {/* Niivue 3D — always in DOM so canvas keeps its dimensions for WebGL init */}
+            <div style={{ position: 'absolute', inset: 0, zIndex: activeSess?.viewMode === '3d' ? 1 : 0 }}>
               <canvas ref={nvCanvasRef} style={{ width: '100%', height: '100%' }} />
             </div>
 
-            {/* 2D slice image */}
-            <div style={{ position: 'absolute', inset: 0, display: activeSess?.viewMode === '3d' ? 'none' : 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            {/* 2D slice */}
+            <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: activeSess?.viewMode === '3d' ? 0 : 1 }}>
               {sliceUrl
                 ? <img
                     src={sliceUrl}
@@ -526,7 +664,6 @@ export default function BrainTumorPage() {
                           <p style={{ color: C.sub, fontSize: 13 }}>슬라이스 생성 중...</p>
                         </>
                       : <>
-                          <div style={{ fontSize: 40, opacity: 0.2 }}>🧠</div>
                           <p style={{ color: C.dim, fontSize: 14 }}>좌측에서 축(Axis)을 선택하세요</p>
                           <p style={{ color: C.dim, fontSize: 11, opacity: 0.7 }}>Axial / Coronal / Sagittal</p>
                         </>
@@ -538,8 +675,7 @@ export default function BrainTumorPage() {
 
           {/* Thumbnail strip */}
           {activeSess?.viewMode !== '3d' && (
-            <div style={{ flexShrink: 0, background: '#080c10', borderTop: `1px solid ${C.border}` }}>
-              {/* Toggle button row */}
+            <div style={{ flexShrink: 0, background: '#080808', borderTop: `1px solid ${C.border}` }}>
               <div style={{ display: 'flex', justifyContent: 'flex-end', borderBottom: `1px solid ${C.border}` }}>
                 <span style={{ color: C.dim, fontSize: 11, padding: '1px 8px', alignSelf: 'center', marginRight: 'auto', marginLeft: 8 }}>
                   Thumbnails
@@ -593,20 +729,18 @@ export default function BrainTumorPage() {
           )}
         </div>
 
-        {/* ── RIGHT: MRI Records + Diag History + Buttons ── */}
+        {/* ── RIGHT: Records + Buttons ── */}
         <div style={{
           width: 220, flexShrink: 0, background: C.panel,
           borderLeft: `1px solid ${C.border}`,
           display: 'flex', flexDirection: 'column',
         }}>
-          {/* Header */}
           <div style={{ padding: '10px 12px 8px', borderBottom: `1px solid ${C.border}` }}>
             <span style={{ fontSize: 12, fontWeight: 600, color: C.sub, letterSpacing: '0.04em' }}>
               환자 MRI 기록
             </span>
           </div>
 
-          {/* Session list */}
           <div style={{ padding: '8px 10px', borderBottom: `1px solid ${C.border}` }}>
             {sessions.length === 0
               ? <p style={{ fontSize: 11, color: C.dim, textAlign: 'center', padding: '8px 0' }}>업로드된 파일 없음</p>
@@ -618,12 +752,12 @@ export default function BrainTumorPage() {
                       onClick={() => switchTab(sess.key)}
                       style={{
                         padding: '7px 10px', borderRadius: 6, cursor: 'pointer',
-                        background: sess.key === activeKey ? '#1c3a52' : C.hover,
-                        border: `1px solid ${sess.key === activeKey ? C.accent : C.border}`,
+                        background: sess.key === activeKey ? '#242424' : C.hover,
+                        border: `1px solid ${sess.key === activeKey ? '#606060' : C.border}`,
                       }}
                     >
                       <p style={{
-                        fontSize: 12, color: sess.key === activeKey ? C.accent : C.text,
+                        fontSize: 12, color: C.text,
                         fontWeight: sess.key === activeKey ? 600 : 400,
                         marginBottom: 2, overflow: 'hidden',
                         textOverflow: 'ellipsis', whiteSpace: 'nowrap',
@@ -640,7 +774,7 @@ export default function BrainTumorPage() {
             }
           </div>
 
-          {/* 진단 기록 (DB) */}
+          {/* 진단 기록 */}
           <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
             <div style={{ padding: '8px 12px 6px', borderBottom: `1px solid ${C.border}` }}>
               <span style={{ fontSize: 11, fontWeight: 600, color: C.sub, letterSpacing: '0.04em' }}>
@@ -660,7 +794,6 @@ export default function BrainTumorPage() {
                           background: C.hover,
                           border: `1px solid ${isTumor ? '#3a1a1a' : '#1a3a2a'}`,
                         }}>
-                          {/* 판정 뱃지 + 제목 */}
                           <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 3 }}>
                             <span style={{
                               fontSize: 10, fontWeight: 700, padding: '1px 5px', borderRadius: 3,
@@ -677,7 +810,6 @@ export default function BrainTumorPage() {
                               {d.title || 'AI 진단'}
                             </p>
                           </div>
-                          {/* 요약 */}
                           {d.summary && (
                             <p style={{
                               fontSize: 10, color: C.sub, lineHeight: 1.5,
@@ -687,7 +819,6 @@ export default function BrainTumorPage() {
                               {d.summary}
                             </p>
                           )}
-                          {/* 날짜 */}
                           <p style={{ fontSize: 10, color: C.dim, marginTop: 3 }}>
                             {d.createdAt
                               ? new Date(d.createdAt).toLocaleString('ko-KR', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
@@ -702,7 +833,6 @@ export default function BrainTumorPage() {
             </div>
           </div>
 
-          {/* Error message */}
           {activeSess?.errorMsg && (
             <div style={{ padding: '0 10px 6px' }}>
               <p style={{
@@ -715,7 +845,6 @@ export default function BrainTumorPage() {
             </div>
           )}
 
-          {/* Action buttons */}
           <div style={{ padding: 10, borderTop: `1px solid ${C.border}`, display: 'flex', flexDirection: 'column', gap: 6 }}>
             <Btn onClick={() => fileInputRef.current?.click()}>파일 업로드</Btn>
             <Btn
@@ -744,7 +873,6 @@ export default function BrainTumorPage() {
       {activeSess?.status === 'done' && clf && (
         <div style={{ background: C.bg, borderTop: `1px solid ${C.border}`, padding: 16 }}>
 
-          {/* Classification cards */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 12 }}>
             <div style={{ padding: 16, borderRadius: 8, background: C.panel, border: `1px solid ${clf.prediction === 'Tumor' ? '#4a1a1a' : '#1a4a2a'}` }}>
               <p style={{ fontSize: 11, letterSpacing: '0.15em', color: C.sub, textTransform: 'uppercase', marginBottom: 8 }}>Prediction</p>
@@ -776,7 +904,7 @@ export default function BrainTumorPage() {
                 </p>
                 <p style={{ fontSize: 12, color: C.sub, marginTop: 6, lineHeight: 1.6 }}>{safety.clinical_action}</p>
                 {safety.requires_specialist_review && (
-                  <span style={{ display: 'inline-block', marginTop: 6, fontSize: 11, padding: '2px 8px', borderRadius: 4, background: '#1a1408', color: C.yellow, border: '1px solid #2a2010' }}>
+                  <span style={{ display: 'inline-block', marginTop: 6, fontSize: 11, padding: '2px 8px', borderRadius: 4, background: '#1e1e1e', color: C.yellow, border: '1px solid #444444' }}>
                     전문의 검토 필요
                   </span>
                 )}
@@ -784,7 +912,6 @@ export default function BrainTumorPage() {
             )}
           </div>
 
-          {/* LLM Medical Report */}
           {report && (
             <div style={{ padding: 18, borderRadius: 8, background: C.panel, border: `1px solid ${C.border}` }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16, paddingBottom: 12, borderBottom: `1px solid ${C.border}` }}>
@@ -826,7 +953,7 @@ export default function BrainTumorPage() {
                     <p style={{ fontSize: 11, letterSpacing: '0.15em', color: C.sub, textTransform: 'uppercase', marginBottom: 6 }}>Differential Diagnosis</p>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                       {report.differential_diagnosis.map((d, i) => (
-                        <span key={i} style={{ fontSize: 12, padding: '4px 10px', borderRadius: 4, background: '#0d1a28', color: C.accent, border: '1px solid #1a3050' }}>{d}</span>
+                        <span key={i} style={{ fontSize: 12, padding: '4px 10px', borderRadius: 4, background: '#1e1e1e', color: C.accent, border: '1px solid #3a3a3a' }}>{d}</span>
                       ))}
                     </div>
                   </div>
@@ -835,11 +962,10 @@ export default function BrainTumorPage() {
             </div>
           )}
 
-          {/* RAG references */}
           {refs.length > 0 && (
             <div style={{ marginTop: 10, padding: 16, borderRadius: 8, background: C.panel, border: `1px solid ${C.border}` }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-                <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#7c5fdc' }} />
+                <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#848484' }} />
                 <p style={{ fontSize: 12, fontWeight: 600, letterSpacing: '0.12em', color: C.sub, textTransform: 'uppercase' }}>
                   References ({refs.length})
                 </p>
@@ -854,7 +980,7 @@ export default function BrainTumorPage() {
                         {ref.content?.slice(0, 120)}...
                       </p>
                     </div>
-                    <span style={{ flexShrink: 0, color: '#7c5fdc', fontSize: 12, fontFamily: 'monospace' }}>
+                    <span style={{ flexShrink: 0, color: '#848484', fontSize: 12, fontFamily: 'monospace' }}>
                       {((ref.relevance_score ?? 0) * 100).toFixed(0)}%
                     </span>
                   </div>

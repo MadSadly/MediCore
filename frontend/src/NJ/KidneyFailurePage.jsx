@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useParams } from 'react-router-dom'
 import axios from 'axios'
 
@@ -171,13 +171,27 @@ function CKDStepList({ activeKey }) {
 export default function KidneyFailurePage() {
   const { id: patientId } = useParams()
 
-  const [screen, setScreen]   = useState('input')
-  const [form, setForm]       = useState({ sc: '', bu: '', pot: '', al: '', bp: '', bgr: '', hemo: '', age: '', sex: 'M', htn: false, dm: false, pe: false, query: '' })
-  const [result, setResult]   = useState(null)
-  const [history, setHistory] = useState([])
-  const [error, setError]     = useState(null)
-  const [saving, setSaving]   = useState(false)
-  const [saved, setSaved]     = useState(false)
+  const [screen, setScreen]         = useState('input')
+  const [form, setForm]             = useState({ sc: '', bu: '', pot: '', al: '', bp: '', bgr: '', hemo: '', age: '', sex: 'M', htn: false, dm: false, pe: false, query: '' })
+  const [result, setResult]         = useState(null)
+  const [history, setHistory]       = useState([])
+  const [selectedHistory, setSelectedHistory] = useState(null)
+  const [error, setError]           = useState(null)
+  const [saving, setSaving]         = useState(false)
+  const [saved, setSaved]           = useState(false)
+
+  const fetchHistory = useCallback(async () => {
+    try {
+      const token = localStorage.getItem('token')
+      const { data } = await axios.get(
+        `/api/patients/${patientId}/diagnoses/kidney/history`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      )
+      setHistory(data.slice().reverse())
+    } catch { /* optional */ }
+  }, [patientId])
+
+  useEffect(() => { fetchHistory() }, [fetchHistory])
 
   const computedEgfr = calcEgfr(form.sc, form.age, form.sex)
   const previewStage = getGfrStage(computedEgfr)
@@ -203,15 +217,8 @@ export default function KidneyFailurePage() {
       })
       setResult(data)
       setScreen('result')
-      // 추세용 이력 조회 (실패해도 무시)
-      try {
-        const token = localStorage.getItem('token')
-        const { data: hist } = await axios.get(
-          `/api/patients/${patientId}/diagnoses/kidney/history`,
-          { headers: { Authorization: `Bearer ${token}` } }
-        )
-        setHistory(hist)
-      } catch { /* history is optional */ }
+      // 이력 갱신
+      fetchHistory()
     } catch (e) {
       setError(e.response?.data?.detail || e.message || 'AI 서버 연결 실패')
       setScreen('input')
@@ -229,8 +236,18 @@ export default function KidneyFailurePage() {
         description:      result.description,
         severity:         result.severity,
         dialysisRequired: result.dialysis_required,
-        egfr:             computedEgfr,
         probabilities:    result.probabilities,
+        egfr:             computedEgfr,
+        sc:               form.sc   ? parseFloat(form.sc)   : null,
+        bu:               form.bu   ? parseFloat(form.bu)   : null,
+        pot:              form.pot  ? parseFloat(form.pot)  : null,
+        al:               form.al   ? parseFloat(form.al)   : null,
+        bp:               form.bp   ? parseFloat(form.bp)   : null,
+        bgr:              form.bgr  ? parseFloat(form.bgr)  : null,
+        hemo:             form.hemo ? parseFloat(form.hemo) : null,
+        htn:              form.htn  ? 'yes' : 'no',
+        dm:               form.dm   ? 'yes' : 'no',
+        pe:               form.pe   ? 'yes' : 'no',
       }, { headers: { Authorization: `Bearer ${token}` } })
       setSaved(true)
     } catch {
@@ -393,6 +410,54 @@ export default function KidneyFailurePage() {
                 AI 진단 요청
               </button>
             </div>
+
+            {/* 과거 진단 이력 */}
+            {history.length > 0 && (
+              <div className="bg-[#151921] border border-slate-800 rounded-2xl p-5">
+                <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-4">과거 진단 이력</p>
+                <div className="space-y-2">
+                  {history.map(h => {
+                    const st = STAGE_STYLE[h.result] || STAGE_STYLE['Stage3']
+                    const stageInfo = CKD_STAGES.find(s => s.key === h.result)
+                    return (
+                      <button
+                        key={h.id}
+                        onClick={() => { setSelectedHistory(h); setScreen('historyDetail') }}
+                        className="w-full flex items-center gap-3 bg-[#0d1117] border border-slate-800 hover:border-slate-600 rounded-xl px-4 py-3 text-left transition-all group"
+                      >
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-0.5">
+                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded border ${st.badge}`}>
+                              {stageInfo?.label || h.result}
+                            </span>
+                            {h.dialysisRequired && (
+                              <span className="text-[9px] text-red-400 bg-red-500/10 border border-red-500/20 px-1.5 py-0.5 rounded">투석 필요</span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-3 mt-1">
+                            {h.egfr != null && (
+                              <span className="text-[10px] text-slate-500">eGFR <span className="text-slate-300 font-semibold">{Number(h.egfr).toFixed(1)}</span></span>
+                            )}
+                            {h.confidence != null && (
+                              <span className="text-[10px] text-slate-500">신뢰도 <span className="text-slate-300 font-semibold">{(h.confidence * 100).toFixed(1)}%</span></span>
+                            )}
+                          </div>
+                        </div>
+                        <div className="text-right flex-shrink-0">
+                          <p className="text-[10px] text-slate-500">
+                            {new Date(h.createdAt).toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' })}
+                          </p>
+                          <p className="text-[9px] text-slate-600">
+                            {new Date(h.createdAt).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}
+                          </p>
+                        </div>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-slate-600 group-hover:text-slate-400 flex-shrink-0"><path d="m9 18 6-6-6-6"/></svg>
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* 오른쪽 1/3 — CKD 단계 미리보기 */}
@@ -561,6 +626,47 @@ export default function KidneyFailurePage() {
                 )}
               </div>
 
+              {/* AI 진단 근거 · 피처 기여도 */}
+              {result.feature_importance && Object.keys(result.feature_importance).length > 0 && (() => {
+                const entries = Object.entries(result.feature_importance)
+                const maxVal = entries[0]?.[1] ?? 1
+                return (
+                  <div className="bg-[#151921] border border-slate-800 rounded-2xl p-5">
+                    <div className="flex items-center gap-2 mb-4">
+                      <div className="w-5 h-5 rounded bg-violet-600/20 border border-violet-500/30 flex items-center justify-center">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-violet-400"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+                      </div>
+                      <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">AI 진단 근거 · 피처 기여도</p>
+                    </div>
+                    <div className="space-y-2">
+                      {entries.map(([feat, val], i) => {
+                        const pct = maxVal > 0 ? (val / maxVal) * 100 : 0
+                        const barColor = i < 3
+                          ? 'bg-violet-500'
+                          : i < 6
+                          ? 'bg-violet-500/60'
+                          : 'bg-violet-500/30'
+                        return (
+                          <div key={feat} className="flex items-center gap-2">
+                            <span className="text-[10px] text-slate-400 w-20 flex-shrink-0 text-right truncate">{feat}</span>
+                            <div className="flex-1 h-3 bg-slate-800 rounded-full overflow-hidden">
+                              <div
+                                className={`h-full rounded-full transition-all ${barColor}`}
+                                style={{ width: `${pct}%` }}
+                              />
+                            </div>
+                            <span className="text-[10px] text-slate-500 w-10 flex-shrink-0 text-right">
+                              {(val * 100).toFixed(1)}%
+                            </span>
+                          </div>
+                        )
+                      })}
+                    </div>
+                    <p className="text-[9px] text-slate-600 mt-3">TabNet Attention 기반 · 해당 예측에서 각 피처가 기여한 상대적 비중</p>
+                  </div>
+                )
+              })()}
+
               {/* AI 진단 의견 */}
               <div className="bg-[#151921] border border-slate-800 rounded-2xl p-5">
                 <div className="flex items-center gap-2 mb-4">
@@ -572,10 +678,20 @@ export default function KidneyFailurePage() {
                     신뢰도 {(result.confidence * 100).toFixed(1)}%
                   </span>
                 </div>
-                <div className="bg-[#0d1117] rounded-xl p-4 text-sm text-slate-300 leading-relaxed border border-slate-800">
-                  {result.rag_answer}
+                <div className="bg-[#0d1117] rounded-xl p-4 border border-slate-800">
+                  <pre className="text-xs text-slate-300 leading-relaxed font-mono whitespace-pre-wrap break-words">{result.rag_answer}</pre>
                 </div>
-                <p className="text-[10px] text-slate-600 mt-3">{result.description}</p>
+                {result.rag_sources && result.rag_sources.length > 0 && (
+                  <div className="flex items-center gap-1.5 mt-2 flex-wrap">
+                    <span className="text-[9px] text-slate-600">출처:</span>
+                    {result.rag_sources.map((src, i) => (
+                      <span key={i} className="text-[9px] bg-slate-800 text-slate-400 border border-slate-700 px-2 py-0.5 rounded-full">
+                        {src}
+                      </span>
+                    ))}
+                  </div>
+                )}
+                <p className="text-[10px] text-slate-600 mt-2">{result.description}</p>
               </div>
 
               {/* 치료 권고사항 */}
@@ -696,6 +812,218 @@ export default function KidneyFailurePage() {
                   }
                 </div>
               </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // ── 이력 상세 화면 ────────────────────────────────────────────────
+  if (screen === 'historyDetail' && selectedHistory) {
+    const h       = selectedHistory
+    const st      = STAGE_STYLE[h.result] || STAGE_STYLE['Stage3']
+    const stageInfo = CKD_STAGES.find(s => s.key === h.result)
+    const recs    = RECOMMENDATIONS[h.result] || RECOMMENDATIONS['Stage3']
+    const recColors = ['red', 'orange', 'yellow', 'blue']
+
+    const histFields = [
+      { key: 'sc',   label: '크레아티닌',  unit: 'mg/dL',  min: 0.7, max: 1.2 },
+      { key: 'bu',   label: 'BUN',        unit: 'mg/dL',  min: 7,   max: 20  },
+      { key: 'pot',  label: '칼륨',       unit: 'mEq/L',  min: 3.5, max: 5.0 },
+      { key: 'al',   label: '알부민',     unit: 'g/dL',   min: 3.5, max: 5.0 },
+      { key: 'bp',   label: '혈압',       unit: 'mmHg',   min: 0,   max: 130 },
+      { key: 'bgr',  label: '혈당',       unit: 'mg/dL',  min: 70,  max: 140 },
+      { key: 'hemo', label: '헤모글로빈', unit: 'g/dL',   min: 12,  max: 17  },
+    ]
+
+    return (
+      <div className="p-8">
+        <div className="max-w-4xl mx-auto space-y-5">
+
+          {/* 타이틀 */}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-1 h-8 bg-slate-500 rounded-full" />
+              <div>
+                <p className="text-[10px] text-slate-400 font-bold tracking-widest uppercase">
+                  과거 기록 · {new Date(h.createdAt).toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' })}
+                  {' '}{new Date(h.createdAt).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}
+                </p>
+                <h3 className="text-xl font-bold text-white">신부전 진단 이력</h3>
+              </div>
+            </div>
+            <button
+              onClick={() => setScreen('input')}
+              className="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 text-slate-300 px-4 py-2.5 rounded-xl text-xs font-bold transition-all border border-slate-700"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m15 18-6-6 6-6"/></svg>
+              목록으로
+            </button>
+          </div>
+
+          <div className="grid grid-cols-3 gap-5">
+            {/* 왼쪽 2/3 */}
+            <div className="col-span-2 space-y-5">
+
+              {/* 임상 수치 */}
+              <div className="bg-[#151921] border border-slate-800 rounded-2xl p-5">
+                <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-4">기록된 임상 수치</p>
+                <div className="grid grid-cols-4 gap-3">
+                  {h.egfr != null && (
+                    <div className="border rounded-xl p-3 text-center bg-emerald-500/5 border-emerald-500/20">
+                      <p className="text-[9px] text-slate-500 mb-1">eGFR <span className="text-emerald-500/70">자동</span></p>
+                      <p className="text-base font-bold text-emerald-400">{Number(h.egfr).toFixed(1)}</p>
+                      <p className="text-[9px] text-slate-600">mL/min</p>
+                    </div>
+                  )}
+                  {histFields.map(f => {
+                    if (h[f.key] == null) return null
+                    const out = h[f.key] < f.min || h[f.key] > f.max
+                    return (
+                      <div key={f.key} className={`border rounded-xl p-3 text-center ${out ? 'bg-red-500/8 border-red-500/20' : 'bg-slate-800/30 border-slate-700'}`}>
+                        <p className="text-[9px] text-slate-500 mb-1">{f.label}</p>
+                        <p className={`text-base font-bold ${out ? 'text-red-400' : 'text-slate-200'}`}>{h[f.key]}</p>
+                        <p className="text-[9px] text-slate-600">{f.unit}</p>
+                        {out && <p className="text-[9px] text-red-400 mt-1 font-semibold">↑ 주의</p>}
+                      </div>
+                    )
+                  })}
+                </div>
+                {(h.htn === 'yes' || h.dm === 'yes' || h.pe === 'yes') && (
+                  <div className="flex gap-2 mt-3">
+                    {h.htn === 'yes' && <span className="text-[10px] bg-slate-800 text-slate-300 border border-slate-700 px-2 py-1 rounded-full">고혈압</span>}
+                    {h.dm  === 'yes' && <span className="text-[10px] bg-slate-800 text-slate-300 border border-slate-700 px-2 py-1 rounded-full">당뇨</span>}
+                    {h.pe  === 'yes' && <span className="text-[10px] bg-slate-800 text-slate-300 border border-slate-700 px-2 py-1 rounded-full">부종</span>}
+                  </div>
+                )}
+              </div>
+
+              {/* 진단 소견 */}
+              <div className="bg-[#151921] border border-slate-800 rounded-2xl p-5">
+                <div className="flex items-center gap-2 mb-4">
+                  <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">진단 소견</p>
+                  {h.confidence != null && (
+                    <span className="text-[9px] text-blue-400 bg-blue-500/10 border border-blue-500/20 px-2 py-0.5 rounded-full ml-auto">
+                      신뢰도 {(h.confidence * 100).toFixed(1)}%
+                    </span>
+                  )}
+                </div>
+                <div className="bg-[#0d1117] rounded-xl p-4 text-sm text-slate-300 leading-relaxed border border-slate-800">
+                  {h.description || '기록된 소견이 없습니다.'}
+                </div>
+              </div>
+
+              {/* 치료 권고사항 */}
+              <div className="bg-[#151921] border border-slate-800 rounded-2xl p-5">
+                <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-4">당시 치료 권고사항</p>
+                <div className="space-y-2.5">
+                  {recs.map((rec, i) => {
+                    const c = recColors[Math.min(i, recColors.length - 1)]
+                    const colorMap = {
+                      red:    'bg-red-500/20 border-red-500/30 text-red-400',
+                      orange: 'bg-orange-500/20 border-orange-500/30 text-orange-400',
+                      yellow: 'bg-yellow-500/20 border-yellow-500/30 text-yellow-400',
+                      blue:   'bg-blue-500/20 border-blue-500/30 text-blue-400',
+                    }
+                    return (
+                      <div key={i} className="flex items-start gap-3 bg-[#0d1117] rounded-xl p-3 border border-slate-800">
+                        <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold flex-shrink-0 mt-0.5 border ${colorMap[c]}`}>{i + 1}</span>
+                        <p className="text-sm text-slate-300">{rec}</p>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            </div>
+
+            {/* 오른쪽 1/3 */}
+            <div className="space-y-4">
+
+              {/* CKD 단계 */}
+              <div className="bg-[#151921] border border-slate-800 rounded-2xl p-5">
+                <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-4">CKD 단계</p>
+                <div className="flex items-end justify-between gap-1 h-20 mb-3">
+                  {CKD_STAGES.map((s, i) => {
+                    const active = s.key === h.result
+                    const heights = ['20%', '35%', '55%', '75%', '100%']
+                    const ss = STAGE_STYLE[s.key]
+                    return (
+                      <div key={s.key} className="flex-1 flex flex-col items-center gap-1">
+                        <div
+                          className={`w-full rounded-t transition-all ${ss.bar} ${active ? 'ring-2 ring-offset-1 ring-offset-[#151921]' : ''}`}
+                          style={{ height: heights[i] }}
+                        />
+                        <p className={`text-[8px] ${active ? ss.text + ' font-bold' : 'text-slate-600'}`}>
+                          {s.label.replace('정상/', '').replace('단계', '')}{active ? '↑' : ''}
+                        </p>
+                      </div>
+                    )
+                  })}
+                </div>
+                <div className={`border rounded-xl p-3 text-center ${st.badge}`}>
+                  <p className={`text-xs font-bold ${st.text}`}>{stageInfo?.label} / {stageInfo?.risk}</p>
+                  {h.dialysisRequired && (
+                    <p className={`text-[10px] mt-0.5 ${st.text} opacity-80`}>🔴 투석 필요</p>
+                  )}
+                </div>
+              </div>
+
+              {/* 단계별 확률 */}
+              {h.probabilities && (
+                <div className="bg-[#151921] border border-slate-800 rounded-2xl p-5">
+                  <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-3">단계별 확률</p>
+                  <div className="space-y-2">
+                    {Object.entries(h.probabilities)
+                      .sort(([, a], [, b]) => b - a)
+                      .map(([stage, prob]) => {
+                        const ss   = STAGE_STYLE[stage] || STAGE_STYLE['Stage3']
+                        const pct  = (prob * 100).toFixed(1)
+                        const info = CKD_STAGES.find(c => c.key === stage)
+                        return (
+                          <div key={stage}>
+                            <div className="flex justify-between text-[10px] mb-0.5">
+                              <span className="text-slate-400">{info?.label || stage}</span>
+                              <span className={`font-bold ${ss.text}`}>{pct}%</span>
+                            </div>
+                            <div className="h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                              <div className={`h-full rounded-full ${ss.bar}`} style={{ width: `${pct}%` }} />
+                            </div>
+                          </div>
+                        )
+                      })
+                    }
+                  </div>
+                </div>
+              )}
+
+              {/* eGFR 추세 */}
+              {(() => {
+                const slope = calcSlope(history)
+                const trend = getTrendInfo(slope)
+                return (
+                  <div className="bg-[#151921] border border-slate-800 rounded-2xl p-5">
+                    <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-3">eGFR 추세</p>
+                    {history.filter(h => parseFloat(h.egfr) > 0).length < 2 ? (
+                      <p className="text-[11px] text-slate-600 text-center py-3">
+                        진단 기록이 2회 이상 저장되면<br />추세가 표시됩니다
+                      </p>
+                    ) : (
+                      <div className="space-y-3">
+                        <EgfrSparkline history={history} />
+                        <div className="flex items-center justify-between">
+                          <span className={`text-[10px] px-2 py-1 rounded border font-bold ${trend.bg} ${trend.color}`}>
+                            {trend.label}
+                          </span>
+                          <span className={`text-xs font-bold ${trend.color}`}>
+                            월 {slope >= 0 ? '+' : ''}{slope.toFixed(1)} mL/min
+                          </span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )
+              })()}
             </div>
           </div>
         </div>

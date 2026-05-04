@@ -1,0 +1,28 @@
+{
+  "source": "KDIGO-2024-CKD-Guideline.pdf",
+  "module_tag": "kidney",
+  "embedding_model": "BGE-M3 (1024차원)",
+  "chunk_config": {
+    "size": 800,
+    "overlap": 100
+  },
+  "processing": {
+    "chunk_count": 1421,
+    "embed_time": 1049.394893169403,
+    "embed_avg_ms": 738.490424468264,
+    "store_time": 3.900289297103882
+  },
+  "storage": {
+    "chunk_count": 1421,
+    "total_size_pretty": "21 MB",
+    "total_size_bytes": 22159360,
+    "index_size_pretty": "12 MB",
+    "index_size_bytes": 12959744
+  },
+  "search": {
+    "avg_ms": 15.267229080200195,
+    "median_ms": 14.731049537658691,
+    "min_ms": 13.953685760498047,
+    "max_ms": 18.642663955688477
+  }
+}

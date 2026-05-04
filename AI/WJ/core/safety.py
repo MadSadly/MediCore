@@ -14,7 +14,8 @@ def apply_safety_check(classification: dict) -> tuple[SafetyAssessment, str]:
 
     Args:
         classification: predict_tumor() 반환값
-            {"prediction", "tumor_probability", "normal_probability", "confidence"}
+            {"prediction", "tumor_fraction", "tumor_probability", "normal_probability", "confidence"}
+            confidence: 결정 경계 거리 기반 [0.5, 1.0] — 0.5에 가까울수록 판정 불확실
 
     Returns:
         (SafetyAssessment, disclaimer) 튜플
