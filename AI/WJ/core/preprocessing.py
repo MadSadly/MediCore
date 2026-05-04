@@ -12,13 +12,11 @@ from monai.transforms import (
     LoadImaged,
     NormalizeIntensityd,
     Orientationd,
-    Resized,
     Spacingd,
     ToTensord,
 )
 
-TARGET_SHAPE: Tuple[int, int, int] = (96, 96, 96)
-TARGET_SPACING: Tuple[float, float, float] = (1.5, 1.5, 1.5)
+TARGET_SPACING: Tuple[float, float, float] = (1.0, 1.0, 1.0)
 
 
 def get_inference_transforms() -> Compose:
@@ -28,7 +26,6 @@ def get_inference_transforms() -> Compose:
         Orientationd(keys=["image"], axcodes="RAS"),
         Spacingd(keys=["image"], pixdim=TARGET_SPACING, mode="bilinear"),
         CropForegroundd(keys=["image"], source_key="image", allow_smaller=True),
-        Resized(keys=["image"], spatial_size=TARGET_SHAPE),
         NormalizeIntensityd(keys=["image"], nonzero=True, channel_wise=True),
         ToTensord(keys=["image"]),
     ])
@@ -40,7 +37,8 @@ def preprocess_nifti(nifti_path: str) -> torch.Tensor:
     skull strip은 사전에 완료된 파일을 전달할 것.
 
     Returns:
-        torch.Tensor: shape (1, 1, 96, 96, 96), dtype float32
+        torch.Tensor: shape (1, 1, H, W, D), dtype float32.
+        크기는 원본 해상도에 따라 가변 — sliding_window_inference가 패치 단위로 처리함.
     """
     if not os.path.exists(nifti_path):
         raise FileNotFoundError(f"NIfTI 파일을 찾을 수 없습니다: {nifti_path}")
@@ -49,9 +47,9 @@ def preprocess_nifti(nifti_path: str) -> torch.Tensor:
 
     transform = get_inference_transforms()
     data = transform({"image": nifti_path})
-    tensor = data["image"]  # (1, 96, 96, 96)
+    tensor = data["image"]  # (1, H, W, D)
 
-    return tensor.unsqueeze(0)  # (1, 1, 96, 96, 96)
+    return tensor.unsqueeze(0)  # (1, 1, H, W, D)
 
 
 def validate_nifti_file(nifti_path: str) -> dict:
