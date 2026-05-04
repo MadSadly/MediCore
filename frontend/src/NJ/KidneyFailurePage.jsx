@@ -192,7 +192,20 @@ export default function KidneyFailurePage() {
     } catch { /* optional */ }
   }, [patientId])
 
-  useEffect(() => { fetchHistory() }, [fetchHistory])
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      try {
+        const token = localStorage.getItem('token')
+        const { data } = await axios.get(
+          `/api/patients/${patientId}/diagnoses/kidney/history`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        )
+        if (!cancelled) setHistory(data.slice().reverse())
+      } catch { /* optional */ }
+    })()
+    return () => { cancelled = true }
+  }, [patientId])
 
   const computedEgfr = calcEgfr(form.sc, form.age, form.sex)
   const previewStage = getGfrStage(computedEgfr)
