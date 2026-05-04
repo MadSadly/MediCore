@@ -19,4 +19,6 @@ def health():
     return {"status": "ok", "server": "FastAPI", "module": "colon"}
 
 if __name__ == "__main__":
+    # 모듈 경로는 "패키지.파일명:객체명" 형식이어야 하며, 
+    # app 객체는 현재 파일(dev_server)에 정의되어 있습니다.
     uvicorn.run("GW.dev_server:app", host="0.0.0.0", port=8000, reload=True)
