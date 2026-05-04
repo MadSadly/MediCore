@@ -179,6 +179,7 @@ export default function KidneyFailurePage() {
   const [error, setError]           = useState(null)
   const [saving, setSaving]         = useState(false)
   const [saved, setSaved]           = useState(false)
+  const [showSaveModal, setShowSaveModal] = useState(false)
 
   const fetchHistory = useCallback(async () => {
     try {
@@ -227,6 +228,7 @@ export default function KidneyFailurePage() {
 
   const handleSave = async () => {
     if (!result || saving || saved) return
+    setShowSaveModal(false)
     setSaving(true)
     const token = localStorage.getItem('token')
     try {
@@ -555,7 +557,7 @@ export default function KidneyFailurePage() {
                 다시 입력
               </button>
               <button
-                onClick={handleSave}
+                onClick={() => { if (!saved && !saving) setShowSaveModal(true) }}
                 disabled={saving || saved}
                 className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold transition-all ${saved ? 'bg-green-600 text-white cursor-default' : 'bg-blue-600 hover:bg-blue-700 text-white'}`}
                 style={{ boxShadow: '0 0 15px rgba(37,99,235,0.2)' }}
@@ -815,6 +817,93 @@ export default function KidneyFailurePage() {
             </div>
           </div>
         </div>
+
+        {/* 저장 확인 모달 */}
+        {showSaveModal && (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center"
+            style={{ background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(4px)' }}
+            onClick={() => setShowSaveModal(false)}
+          >
+            <div
+              className="bg-[#0f1623] border border-slate-700 rounded-2xl p-6 w-full max-w-sm mx-4 shadow-2xl"
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="flex items-center gap-3 mb-5">
+                <div className="w-9 h-9 rounded-xl bg-blue-600/20 border border-blue-500/30 flex items-center justify-center flex-shrink-0">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-blue-400">
+                    <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
+                    <polyline points="17 21 17 13 7 13 7 21"/>
+                    <polyline points="7 3 7 8 15 8"/>
+                  </svg>
+                </div>
+                <div>
+                  <p className="text-sm font-bold text-white">진단 결과 저장</p>
+                  <p className="text-[10px] text-slate-500 mt-0.5">아래 결과를 환자 기록에 저장합니다</p>
+                </div>
+              </div>
+
+              <div className="bg-[#0d1117] rounded-xl p-4 border border-slate-800 space-y-3 mb-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className={`text-xs font-bold px-2.5 py-1 rounded-full border ${(STAGE_STYLE[result.prediction] || STAGE_STYLE['Stage3']).badge}`}>
+                      {result.prediction?.replace('Normal_', '') ?? '-'}
+                    </span>
+                    {result.dialysis_required && (
+                      <span className="text-[10px] bg-red-500/20 text-red-400 border border-red-500/30 px-2 py-0.5 rounded-full font-bold">투석 필요</span>
+                    )}
+                  </div>
+                  <span className="text-xs text-slate-400">신뢰도 <span className="text-white font-bold">{(result.confidence * 100).toFixed(1)}%</span></span>
+                </div>
+                <p className="text-[11px] text-slate-400">{result.description}</p>
+                <div className="grid grid-cols-3 gap-2 pt-1 border-t border-slate-800">
+                  {computedEgfr !== null && (
+                    <div className="text-center">
+                      <p className="text-[9px] text-slate-600 mb-0.5">eGFR</p>
+                      <p className="text-xs font-bold text-emerald-400">{computedEgfr}</p>
+                    </div>
+                  )}
+                  {form.sc && (
+                    <div className="text-center">
+                      <p className="text-[9px] text-slate-600 mb-0.5">크레아티닌</p>
+                      <p className="text-xs font-bold text-slate-200">{form.sc}</p>
+                    </div>
+                  )}
+                  {form.bu && (
+                    <div className="text-center">
+                      <p className="text-[9px] text-slate-600 mb-0.5">BUN</p>
+                      <p className="text-xs font-bold text-slate-200">{form.bu}</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {result.alerts?.some(a => a.level === 'critical') && (
+                <div className="flex items-center gap-2 bg-red-500/10 border border-red-500/30 rounded-xl px-3 py-2.5 mb-4">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-red-400 flex-shrink-0">
+                    <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/>
+                  </svg>
+                  <p className="text-[10px] text-red-300">위험 수치가 포함된 결과입니다. 저장 후 즉각 조치가 필요합니다.</p>
+                </div>
+              )}
+
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setShowSaveModal(false)}
+                  className="flex-1 bg-slate-800 hover:bg-slate-700 text-slate-300 py-2.5 rounded-xl text-xs font-bold transition-all border border-slate-700"
+                >
+                  취소
+                </button>
+                <button
+                  onClick={handleSave}
+                  className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-2.5 rounded-xl text-xs font-bold transition-all"
+                >
+                  저장 확인
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     )
   }
@@ -1028,6 +1117,7 @@ export default function KidneyFailurePage() {
           </div>
         </div>
       </div>
+
     )
   }
 

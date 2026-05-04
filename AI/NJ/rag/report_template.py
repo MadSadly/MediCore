@@ -15,8 +15,10 @@
 from __future__ import annotations
 
 import re
-
 import unicodedata
+
+from pydantic import BaseModel, Field
+from langchain_core.output_parsers import PydanticOutputParser
 
 # ── 상수 ──────────────────────────────────────────────────────────
 DIV  = "━" * 52
@@ -172,7 +174,67 @@ def build_llm_prompt(
     )
 
 
-# ── LLM 응답 파싱 ─────────────────────────────────────────────────
+# ── LangChain Pydantic 파서 ───────────────────────────────────────
+
+class ReportSections(BaseModel):
+    sec2:  str = Field(default="", description="위험도 평가 및 원인 추정 내용 (한국어)")
+    sec3:  str = Field(default="", description="이상 소견 해석 내용 (한국어)")
+    sec41: str = Field(default="", description="약물 처방 내용 (한국어)")
+    sec42: str = Field(default="", description="생활 습관 및 비약물 치료 내용 (한국어)")
+    sec43: str = Field(default="", description="추적 검사 계획 내용 (한국어)")
+    sec5:  str = Field(default="", description="종합 진단 소견 — 자연스러운 단락 형식, 항목 번호 없이 (한국어)")
+
+
+def get_report_parser() -> PydanticOutputParser:
+    return PydanticOutputParser(pydantic_object=ReportSections)
+
+
+def build_lc_prompt(
+    prediction: str,
+    input_data: dict,
+    contexts: list,
+    query: str,
+    format_instructions: str,
+) -> str:
+    """LangChain PydanticOutputParser 전용 프롬프트 — JSON 형식으로 응답 요청."""
+    meta = STAGE_META.get(prediction, ("", "", "", ""))
+
+    vals = []
+    for key, name, unit, _ in FIELD_META:
+        v = input_data.get(key)
+        if v is not None:
+            vals.append(f"{name} {float(v):.1f} {unit}")
+    vals_str = " | ".join(vals) if vals else "수치 미입력"
+
+    comorbid = [label for k, label in COMORBID_LABELS.items()
+                if input_data.get(k) in ("yes", True, "1", 1)]
+    comorbid_str = ", ".join(comorbid) if comorbid else "없음"
+
+    ctx_text = "\n\n".join(
+        f"[참고자료 {i+1}] 출처: {c['source']}\n{c['content']}"
+        for i, c in enumerate(contexts[:5])
+    )
+
+    clinical_q = query or f"{prediction} 단계 환자의 치료 계획"
+
+    return (
+        "[지시사항]\n"
+        "반드시 한국어로만 작성하십시오. 영어·외국어 절대 금지.\n"
+        "아래 KDIGO 가이드라인 참고자료만을 근거로 작성하십시오.\n"
+        "추측이나 가이드라인에 없는 내용을 절대 작성하지 마십시오.\n\n"
+        "[환자 임상 정보]\n"
+        f"CKD 단계: {meta[0]} ({meta[2]}, {meta[1]})\n"
+        f"임상 수치: {vals_str}\n"
+        f"동반 증상: {comorbid_str}\n"
+        f"임상 질문: {clinical_q}\n\n"
+        "[KDIGO 가이드라인 참고자료]\n"
+        f"{ctx_text}\n\n"
+        "[응답 형식]\n"
+        f"{format_instructions}"
+    )
+
+
+# ── LLM 응답 파싱 (레거시 — LangChain 미사용 환경 호환) ────────────
 
 _SECTION_PATTERNS = [
     ("sec2",  re.compile(r"2\s*[\.．]\s*위험도[^\n]*\n", re.IGNORECASE)),
