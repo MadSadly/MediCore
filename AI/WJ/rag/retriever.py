@@ -38,7 +38,7 @@ def embed_query(text: str) -> list[float]:
     from vertexai.language_models import TextEmbeddingInput
     model = _get_embedding_model()
     inputs = [TextEmbeddingInput(text, task_type="RETRIEVAL_QUERY")]
-    result = model.get_embeddings(inputs, output_dimensionality=1024)
+    result = model.get_embeddings(inputs, output_dimensionality=768)
     return result[0].values
 
 

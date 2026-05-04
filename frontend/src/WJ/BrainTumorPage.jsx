@@ -7,14 +7,14 @@ const AI_URL = import.meta.env.VITE_AI_URL || 'http://localhost:8000'
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8080'
 
 const C = {
-  bg:     '#0d1117',
-  panel:  '#161b22',
-  border: '#21262d',
-  text:   '#e6edf3',
-  sub:    '#8b949e',
-  dim:    '#3d444d',
-  accent: '#4da6ff',
-  hover:  '#1c2128',
+  bg:     '#080808',
+  panel:  '#121212',
+  border: '#2a2a2a',
+  text:   '#ececec',
+  sub:    '#848484',
+  dim:    '#464646',
+  accent: '#c8c8c8',
+  hover:  '#1a1a1a',
   red:    '#f87171',
   green:  '#34d399',
   yellow: '#fbbf24',
@@ -53,9 +53,9 @@ const Btn = ({ children, onClick, disabled, primary, style: s }) => (
     style={{
       width: '100%', padding: '9px 12px', borderRadius: 6,
       fontSize: 13, fontWeight: 600, cursor: disabled ? 'not-allowed' : 'pointer',
-      background: disabled ? C.bg : primary ? '#0d3a5a' : C.hover,
-      border: `1px solid ${disabled ? C.border : primary ? '#1a6090' : '#30363d'}`,
-      color: disabled ? C.dim : primary ? C.accent : C.text,
+      background: disabled ? C.bg : primary ? '#d4d4d4' : C.hover,
+      border: `1px solid ${disabled ? C.border : primary ? '#d4d4d4' : '#363636'}`,
+      color: disabled ? C.dim : primary ? '#080808' : C.text,
       transition: 'all 0.15s', textAlign: 'center', ...s,
     }}
   >
@@ -284,7 +284,7 @@ export default function BrainTumorPage() {
     return (
       <div style={{ minHeight: '100vh', background: C.bg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <div style={{ width: 480, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 20, padding: '40px 24px' }}>
-          <div style={{ fontSize: 52, lineHeight: 1 }}>🧠</div>
+    
           <h2 style={{ color: C.text, fontSize: 22, fontWeight: 700, margin: 0 }}>뇌종양 MRI 분석</h2>
           <p style={{ color: C.sub, fontSize: 14, margin: 0 }}>NIfTI 파일을 업로드하여 AI 진단을 시작합니다</p>
 
@@ -352,6 +352,7 @@ export default function BrainTumorPage() {
   return (
     <div style={{
       display: 'flex', flexDirection: 'column',
+      height: '100%',
       background: C.bg, color: C.text,
       fontFamily: 'system-ui, -apple-system, sans-serif',
     }}>
@@ -398,33 +399,43 @@ export default function BrainTumorPage() {
       </div>
 
       {/* ════ 3-PANEL BODY ════ */}
-      <div style={{ display: 'flex', height: 560, flexShrink: 0 }}>
+      <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
 
         {/* ── LEFT: 2D/3D + Axis ── */}
         <div style={{
           width: 116, flexShrink: 0, background: C.panel,
           borderRight: `1px solid ${C.border}`,
           display: 'flex', flexDirection: 'column',
-          padding: '10px 8px', gap: 6, overflowY: 'auto',
+          padding: '8px 6px', gap: 5, overflowY: 'auto',
         }}>
-          {/* 2D / 3D toggle */}
-          <div style={{ display: 'flex', gap: 4, marginBottom: 4 }}>
-            {['2D', '3D'].map(m => {
-              const isActive = activeSess?.viewMode === m.toLowerCase()
+          {/* 2D / 3D segmented pill */}
+          <div style={{
+            background: C.bg, border: `1px solid ${C.border}`,
+            borderRadius: 7, padding: 3, display: 'flex', gap: 2,
+            opacity: activeSess ? 1 : 0.38, marginBottom: 2,
+          }}>
+            {[
+              { label: '2D', sub: 'SLICE', mode: '2d', fn: handle2D },
+              { label: '3D', sub: 'VOL',   mode: '3d', fn: handle3D },
+            ].map(({ label, sub, mode, fn }) => {
+              const isActive = activeSess?.viewMode === mode
               return (
                 <button
-                  key={m}
-                  onClick={() => m === '3D' ? handle3D() : handle2D()}
+                  key={mode}
+                  onClick={() => activeSess && fn()}
                   disabled={!activeSess}
                   style={{
-                    flex: 1, padding: '6px 0', fontSize: 12, fontWeight: 700,
-                    background: isActive ? '#1c4a6e' : C.hover,
-                    color: isActive ? C.accent : C.sub,
-                    border: `1px solid ${isActive ? '#2a6090' : C.border}`,
-                    borderRadius: 4, cursor: activeSess ? 'pointer' : 'not-allowed',
-                    opacity: activeSess ? 1 : 0.5,
+                    flex: 1, padding: '7px 4px', border: 'none', borderRadius: 5,
+                    background: isActive ? '#d4d4d4' : 'transparent',
+                    color: isActive ? '#080808' : C.dim,
+                    cursor: activeSess ? 'pointer' : 'default',
+                    transition: 'all 0.15s',
+                    display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1,
                   }}
-                >{m}</button>
+                >
+                  <span style={{ fontSize: 13, fontWeight: 800, letterSpacing: '0.04em' }}>{label}</span>
+                  <span style={{ fontSize: 8, fontWeight: 600, letterSpacing: '0.12em', opacity: 0.65 }}>{sub}</span>
+                </button>
               )
             })}
           </div>
@@ -440,35 +451,43 @@ export default function BrainTumorPage() {
                 key={axis}
                 onClick={() => activeSess?.viewMode !== '3d' && handleAxis(axis)}
                 style={{
-                  padding: '8px 6px', borderRadius: 6, textAlign: 'center',
+                  borderRadius: 6, overflow: 'hidden', position: 'relative',
                   cursor: activeSess && activeSess.viewMode !== '3d' ? 'pointer' : 'default',
-                  background: isActive ? '#1c3a52' : C.hover,
-                  border: `1px solid ${isActive ? '#1a5070' : C.border}`,
+                  background: '#000',
+                  border: `2px solid ${isActive ? C.accent : C.border}`,
                   opacity: activeSess && activeSess.viewMode !== '3d' ? 1 : 0.35,
+                  boxShadow: isActive ? `0 0 0 1px rgba(200,200,200,0.2)` : 'none',
+                  transition: 'border-color 0.15s, box-shadow 0.15s',
                 }}
               >
-                <p style={{
-                  fontSize: 10, letterSpacing: '0.1em', fontWeight: 600,
-                  color: isActive ? C.accent : C.sub, textTransform: 'uppercase', marginBottom: 5,
+                <img
+                  src={AXIS_ICONS[axis]}
+                  alt={axis}
+                  style={{ width: '100%', height: 90, objectFit: 'contain', display: 'block' }}
+                />
+                <div style={{
+                  position: 'absolute', bottom: 0, left: 0, right: 0,
+                  background: 'linear-gradient(transparent, rgba(0,0,0,0.88))',
+                  padding: '12px 6px 5px',
+                  textAlign: 'center',
                 }}>
-                  {axis.slice(0, 3).toUpperCase()}
-                </p>
-                <div style={{ position: 'relative', display: 'flex', justifyContent: 'center' }}>
-                  <img
-                    src={AXIS_ICONS[axis]}
-                    alt={axis}
-                    style={{ width: 60, height: 54, objectFit: 'contain', opacity: isActive ? 1 : 0.55 }}
-                  />
-                  {isLoading && (
-                    <div style={{
-                      position: 'absolute', inset: 0,
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      background: 'rgba(13,17,23,0.75)', borderRadius: 4,
-                    }}>
-                      <Spinner size={18} />
-                    </div>
-                  )}
+                  <span style={{
+                    fontSize: 11, letterSpacing: '0.14em', fontWeight: 700,
+                    color: isActive ? C.accent : 'rgba(255,255,255,0.7)',
+                    textTransform: 'uppercase',
+                  }}>
+                    {axis.slice(0, 3).toUpperCase()}
+                  </span>
                 </div>
+                {isLoading && (
+                  <div style={{
+                    position: 'absolute', inset: 0,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    background: 'rgba(13,17,23,0.75)',
+                  }}>
+                    <Spinner size={18} />
+                  </div>
+                )}
               </div>
             )
           })}
@@ -504,7 +523,7 @@ export default function BrainTumorPage() {
           </div>
 
           {/* Main image area — wheel listener attached here */}
-          <div ref={sliceViewRef} style={{ flex: 1, position: 'relative', background: '#050709', overflow: 'hidden' }}>
+          <div ref={sliceViewRef} style={{ flex: 1, position: 'relative', background: '#050505', overflow: 'hidden' }}>
 
             {/* Niivue 3D — wrapper div controls visibility so Niivue can't escape display:none by touching canvas.style */}
             <div style={{ position: 'absolute', inset: 0, display: activeSess?.viewMode === '3d' ? 'block' : 'none' }}>
@@ -526,7 +545,7 @@ export default function BrainTumorPage() {
                           <p style={{ color: C.sub, fontSize: 13 }}>슬라이스 생성 중...</p>
                         </>
                       : <>
-                          <div style={{ fontSize: 40, opacity: 0.2 }}>🧠</div>
+                    
                           <p style={{ color: C.dim, fontSize: 14 }}>좌측에서 축(Axis)을 선택하세요</p>
                           <p style={{ color: C.dim, fontSize: 11, opacity: 0.7 }}>Axial / Coronal / Sagittal</p>
                         </>
@@ -538,7 +557,7 @@ export default function BrainTumorPage() {
 
           {/* Thumbnail strip */}
           {activeSess?.viewMode !== '3d' && (
-            <div style={{ flexShrink: 0, background: '#080c10', borderTop: `1px solid ${C.border}` }}>
+            <div style={{ flexShrink: 0, background: '#080808', borderTop: `1px solid ${C.border}` }}>
               {/* Toggle button row */}
               <div style={{ display: 'flex', justifyContent: 'flex-end', borderBottom: `1px solid ${C.border}` }}>
                 <span style={{ color: C.dim, fontSize: 11, padding: '1px 8px', alignSelf: 'center', marginRight: 'auto', marginLeft: 8 }}>
@@ -618,12 +637,12 @@ export default function BrainTumorPage() {
                       onClick={() => switchTab(sess.key)}
                       style={{
                         padding: '7px 10px', borderRadius: 6, cursor: 'pointer',
-                        background: sess.key === activeKey ? '#1c3a52' : C.hover,
-                        border: `1px solid ${sess.key === activeKey ? C.accent : C.border}`,
+                        background: sess.key === activeKey ? '#242424' : C.hover,
+                        border: `1px solid ${sess.key === activeKey ? '#606060' : C.border}`,
                       }}
                     >
                       <p style={{
-                        fontSize: 12, color: sess.key === activeKey ? C.accent : C.text,
+                        fontSize: 12, color: C.text,
                         fontWeight: sess.key === activeKey ? 600 : 400,
                         marginBottom: 2, overflow: 'hidden',
                         textOverflow: 'ellipsis', whiteSpace: 'nowrap',
@@ -776,7 +795,7 @@ export default function BrainTumorPage() {
                 </p>
                 <p style={{ fontSize: 12, color: C.sub, marginTop: 6, lineHeight: 1.6 }}>{safety.clinical_action}</p>
                 {safety.requires_specialist_review && (
-                  <span style={{ display: 'inline-block', marginTop: 6, fontSize: 11, padding: '2px 8px', borderRadius: 4, background: '#1a1408', color: C.yellow, border: '1px solid #2a2010' }}>
+                  <span style={{ display: 'inline-block', marginTop: 6, fontSize: 11, padding: '2px 8px', borderRadius: 4, background: '#1e1e1e', color: C.yellow, border: '1px solid #444444' }}>
                     전문의 검토 필요
                   </span>
                 )}
@@ -826,7 +845,7 @@ export default function BrainTumorPage() {
                     <p style={{ fontSize: 11, letterSpacing: '0.15em', color: C.sub, textTransform: 'uppercase', marginBottom: 6 }}>Differential Diagnosis</p>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                       {report.differential_diagnosis.map((d, i) => (
-                        <span key={i} style={{ fontSize: 12, padding: '4px 10px', borderRadius: 4, background: '#0d1a28', color: C.accent, border: '1px solid #1a3050' }}>{d}</span>
+                        <span key={i} style={{ fontSize: 12, padding: '4px 10px', borderRadius: 4, background: '#1e1e1e', color: C.accent, border: '1px solid #3a3a3a' }}>{d}</span>
                       ))}
                     </div>
                   </div>
@@ -839,7 +858,7 @@ export default function BrainTumorPage() {
           {refs.length > 0 && (
             <div style={{ marginTop: 10, padding: 16, borderRadius: 8, background: C.panel, border: `1px solid ${C.border}` }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-                <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#7c5fdc' }} />
+                <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#848484' }} />
                 <p style={{ fontSize: 12, fontWeight: 600, letterSpacing: '0.12em', color: C.sub, textTransform: 'uppercase' }}>
                   References ({refs.length})
                 </p>
@@ -854,7 +873,7 @@ export default function BrainTumorPage() {
                         {ref.content?.slice(0, 120)}...
                       </p>
                     </div>
-                    <span style={{ flexShrink: 0, color: '#7c5fdc', fontSize: 12, fontFamily: 'monospace' }}>
+                    <span style={{ flexShrink: 0, color: '#848484', fontSize: 12, fontFamily: 'monospace' }}>
                       {((ref.relevance_score ?? 0) * 100).toFixed(0)}%
                     </span>
                   </div>
