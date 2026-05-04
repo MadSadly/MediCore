@@ -17,6 +17,7 @@ from __future__ import annotations
 import json
 import os
 import pickle
+import random
 import re
 import sys
 import time
@@ -116,7 +117,8 @@ def _extract_entities_json(genai_module, chunk_id: int, content: str) -> dict | 
     model = genai_module.GenerativeModel(GEMINI_MODEL)
     body = content[:MAX_CONTENT_CHARS]
     prompt = EXTRACTION_PROMPT.format(chunk_id=chunk_id, text=body)
-    max_attempts = 2  # 초기 1회 + rate limit 시 30초 후 1회 재시도
+    max_attempts = 4
+    base = 30.0
 
     for attempt in range(max_attempts):
         try:
@@ -135,12 +137,15 @@ def _extract_entities_json(genai_module, chunk_id: int, content: str) -> dict | 
             return json.loads(cleaned)
         except Exception as e:
             if _is_rate_limit_error(e):
-                print(
-                    f"  ⏳ rate limit (chunk id={chunk_id}) "
-                    f"attempt={attempt + 1}/{max_attempts}: {e}"
-                )
                 if attempt + 1 < max_attempts:
-                    time.sleep(30.0)
+                    jitter = random.uniform(0, 10)
+                    wait = min(base * (2**attempt) + jitter, 300.0)
+                    print(
+                        f"  ⏳ rate limit (chunk id={chunk_id}) "
+                        f"attempt={attempt + 1}/{max_attempts} · {wait:.1f}s 대기",
+                        flush=True,
+                    )
+                    time.sleep(wait)
                     continue
                 print(f"  ⚠️ chunk id={chunk_id} 재시도 후 포기 · 스킵")
                 return None
@@ -252,6 +257,23 @@ def _load_processed_from_entities_jsonl() -> tuple[set[int], nx.MultiDiGraph, li
     return ids, G, edge_ctr
 
 
+def _check_integrity(processed_ids: set[int], db_chunk_ids: set[int]) -> None:
+    """JSONL chunk_id와 DB id 집합 불일치 시 경고 로그."""
+    only_in_jsonl = processed_ids - db_chunk_ids
+    only_in_db = db_chunk_ids - processed_ids
+    if only_in_jsonl:
+        print(
+            f"⚠️  [무결성] JSONL에만 있고 DB에 없는 chunk_id {len(only_in_jsonl)}개: "
+            f"{sorted(only_in_jsonl)[:10]}{'...' if len(only_in_jsonl) > 10 else ''}",
+            file=sys.stderr,
+        )
+    if only_in_db:
+        print(
+            f"ℹ️  [무결성] DB에 있으나 미처리 chunk_id {len(only_in_db)}개 "
+            f"(이번 실행에서 처리 예정)"
+        )
+
+
 def main():
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     db_url = os.getenv("DATABASE_URL")
@@ -268,6 +290,9 @@ def main():
         conn.close()
 
     processed_ids, G, edge_ctr = _load_processed_from_entities_jsonl()
+    db_chunk_ids = {cid for cid, _, _ in chunks}
+    _check_integrity(processed_ids, db_chunk_ids)
+
     resumed_n = len(processed_ids)
 
     print(f"📄 청크 {len(chunks)}건 (DB) · 이미 처리된 청크 {resumed_n}개 스킵")

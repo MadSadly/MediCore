@@ -84,6 +84,11 @@ export default function EyeDiseasePage() {
     setInferenceMs(null);
   };
 
+  const resetLoading = () => {
+    setGradcamLoading(false);
+    setReportLoading(false);
+  };
+
   const reset = () => {
     analyzeAbortRef.current?.abort();
     analyzeAbortRef.current = null;
@@ -151,7 +156,7 @@ export default function EyeDiseasePage() {
               break;
 
             case "done":
-              setReportLoading(false);
+              resetLoading();
               if (data.inference_time_ms != null) setInferenceMs(data.inference_time_ms);
               if (data.quality_score != null) setQualityScore(data.quality_score);
               setStep(STEPS.DONE);
@@ -159,8 +164,7 @@ export default function EyeDiseasePage() {
 
             case "error":
               setError(data.message || "알 수 없는 오류");
-              setGradcamLoading(false);
-              setReportLoading(false);
+              resetLoading();
               setStep(STEPS.ERROR);
               break;
 
@@ -173,6 +177,7 @@ export default function EyeDiseasePage() {
     } catch (err) {
       if (isAbortError(err)) return;
       setError(err.message);
+      resetLoading();
       setStep(STEPS.ERROR);
     }
   };

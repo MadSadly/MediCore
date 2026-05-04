@@ -1,8 +1,9 @@
 """
 AI/SH/llm/report_generator.py
-안과 CDSS — Gemini 소견서 스트리밍 생성 (OPH-10)
+안과 CDSS — Gemini 소견서 비동기 생성 (OPH-10, SSE용 async generator)
 
 담당: 홍승현 (SH)
+300자 이내 단일 응답 → stream=False 단순화
 """
 
 import asyncio
@@ -32,10 +33,9 @@ async def generate_report_stream(
     clinical_note: str | None,
 ) -> AsyncGenerator[str, None]:
     """
-    Gemini 소견서 스트리밍 생성 (역할 규칙은 system_instruction, 여기에는 데이터만.)
-
-    Yields:
-        소견서 텍스트 청크
+    Gemini 소견서: 300자 이내 단일 응답 → stream=False 단순화.
+    역할 규칙은 system_instruction, 여기에는 데이터만.
+    SSE 호환을 위해 짧은 텍스트를 한 번 yield.
     """
     model = get_model(REPORT_MODEL, system_instruction=SYSTEM_PROMPT)
 
@@ -60,11 +60,10 @@ async def generate_report_stream(
 {citation_text}
 """
 
-    def _collect_stream_chunks():
-        return list(model.generate_content(prompt, stream=True))
+    def _call_model():
+        return model.generate_content(prompt, stream=False)
 
-    chunks = await asyncio.to_thread(_collect_stream_chunks)
-    for chunk in chunks:
-        if getattr(chunk, "text", None):
-            yield chunk.text
-            await asyncio.sleep(0)
+    response = await asyncio.to_thread(_call_model)
+    text = getattr(response, "text", None) or ""
+    if text:
+        yield text

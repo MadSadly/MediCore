@@ -1,5 +1,6 @@
 package com.example.backend_main.SH.service;
 
+import com.example.backend_main.SH.dto.AiSyncResponse;
 import com.example.backend_main.SH.dto.EyeDiagnosisHistoryResponse;
 import com.example.backend_main.SH.dto.EyeDiagnosisRequest;
 import com.example.backend_main.SH.dto.EyeDiagnosisResponse;
@@ -21,7 +22,6 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.nio.charset.StandardCharsets;
 import java.util.List;
-import java.util.Map;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -62,13 +62,13 @@ public class EyeDiagnosisService {
 
         log.info("AI 서버 호출 시작 | url={} patientId={}", aiUrl, request.getPatientId());
 
-        final ResponseEntity<Map<String, Object>> aiResponse;
+        final ResponseEntity<AiSyncResponse> aiResponse;
         try {
             aiResponse = restTemplate.exchange(
                     aiUrl,
                     HttpMethod.POST,
                     entity,
-                    new ParameterizedTypeReference<Map<String, Object>>() {}
+                    new ParameterizedTypeReference<AiSyncResponse>() {}
             );
         } catch (HttpStatusCodeException ex) {
             log.error(
@@ -101,100 +101,76 @@ public class EyeDiagnosisService {
                 request.getPatientId()
         );
 
-        Map<String, Object> result = aiResponse.getBody();
+        AiSyncResponse dto = aiResponse.getBody();
+        if (dto == null) {
+            throw new RuntimeException("AI 서버 응답 오류");
+        }
 
-        @SuppressWarnings("unchecked")
-        Map<String, Object> dlResult =
-                result.get("dl_result") instanceof Map ? (Map<String, Object>) result.get("dl_result") : null;
-        if (dlResult == null) {
+        AiSyncResponse.AiDlResult dlResultObj = dto.getDlResult();
+        if (dlResultObj == null) {
             throw new IllegalStateException("AI 응답에 dl_result가 없거나 형식이 올바르지 않습니다.");
         }
 
-        @SuppressWarnings("unchecked")
-        Map<String, Object> primary =
-                dlResult.get("primary_disease") instanceof Map
-                        ? (Map<String, Object>) dlResult.get("primary_disease")
-                        : null;
+        AiSyncResponse.AiPrimaryDisease primary = dlResultObj.getPrimaryDisease();
         if (primary == null) {
             throw new IllegalStateException("AI 응답에 primary_disease가 없습니다.");
         }
 
-        @SuppressWarnings("unchecked")
-        Map<String, Object> stage =
-                dlResult.get("stage") instanceof Map ? (Map<String, Object>) dlResult.get("stage") : null;
-
-        String diseaseName =
-                primary.get("disease_name") != null ? primary.get("disease_name").toString() : null;
+        String diseaseName = primary.getDiseaseName();
         if (diseaseName == null || diseaseName.isBlank()) {
             throw new IllegalStateException("AI 응답 disease_name이 비어 있습니다.");
         }
 
-        Object confObj = primary.get("confidence");
-        if (!(confObj instanceof Number)) {
+        Double confidenceObj = primary.getConfidence();
+        if (confidenceObj == null) {
             throw new IllegalStateException("AI 응답 primary_disease.confidence가 없거나 숫자가 아닙니다.");
         }
-        double confidence = ((Number) confObj).doubleValue();
+        double confidence = confidenceObj;
 
-        Object infObj = result.get("inference_time_ms");
-        if (!(infObj instanceof Number)) {
+        Double infObj = dto.getInferenceTimeMs();
+        if (infObj == null) {
             throw new IllegalStateException("AI 응답 inference_time_ms가 없거나 숫자가 아닙니다.");
         }
-        double inferenceTimeMs = ((Number) infObj).doubleValue();
+        double inferenceTimeMs = infObj;
 
-        Object sessionObj = result.get("session_id");
-        String sessionId = sessionObj != null ? sessionObj.toString().trim() : "";
+        String sessionId = dto.getSessionId();
+        sessionId = sessionId != null ? sessionId.trim() : "";
         if (sessionId.isEmpty()) {
             throw new IllegalStateException("AI 응답 session_id가 비어 있습니다.");
         }
 
-        String report =
-                result.get("report") != null ? result.get("report").toString() : "";
+        String report = dto.getReport() != null ? dto.getReport() : "";
 
-        String modelVersion =
-                dlResult.get("model_version") != null
-                        ? dlResult.get("model_version").toString()
-                        : null;
+        String modelVersion = dlResultObj.getModelVersion();
         if (modelVersion == null || modelVersion.isBlank()) {
             modelVersion = "unknown";
         }
 
         String gradcam =
-                dlResult.get("gradcam_base64") != null ? dlResult.get("gradcam_base64").toString() : null;
+                dlResultObj.getGradcamBase64() != null ? dlResultObj.getGradcamBase64() : null;
 
-        @SuppressWarnings("unchecked")
-        Map<String, Object> emergency =
-                result.get("emergency") instanceof Map ? (Map<String, Object>) result.get("emergency") : null;
         boolean isEmergency = false;
         String emergencyReason = null;
+        AiSyncResponse.AiEmergency emergency = dto.getEmergency();
         if (emergency != null) {
-            Object ie = emergency.get("is_emergency");
-            if (ie instanceof Boolean b) {
-                isEmergency = b;
-            } else if (ie != null) {
-                isEmergency = Boolean.parseBoolean(ie.toString());
+            Boolean ie = emergency.getIsEmergency();
+            if (ie != null) {
+                isEmergency = ie;
             }
-            Object r = emergency.get("reason");
-            emergencyReason = r != null ? r.toString() : null;
+            emergencyReason = emergency.getReason();
         }
 
-        Double qualityScore =
-                result.get("quality_score") instanceof Number
-                        ? ((Number) result.get("quality_score")).doubleValue()
-                        : null;
+        Double qualityScore = dto.getQualityScore();
+
+        AiSyncResponse.AiStage stage = dlResultObj.getStage();
 
         EyeDiagnosis saved = repository.save(EyeDiagnosis.builder()
                 .patientId(request.getPatientId())
                 .sessionId(sessionId)
                 .primaryDisease(diseaseName)
                 .confidence(confidence)
-                .stage(stage != null && stage.get("stage") instanceof Number
-                        ? ((Number) stage.get("stage")).intValue()
-                        : null)
-                .stageName(
-                        stage != null && stage.get("stage_name") != null
-                                ? stage.get("stage_name").toString()
-                                : null
-                )
+                .stage(stage != null ? stage.getStage() : null)
+                .stageName(stage != null && stage.getStageName() != null ? stage.getStageName() : null)
                 .isEmergency(isEmergency)
                 .emergencyReason(emergencyReason)
                 .gradcamBase64(gradcam)
@@ -222,7 +198,7 @@ public class EyeDiagnosisService {
                 .report(saved.getReport())
                 .inferenceTimeMs(saved.getInferenceTimeMs())
                 .qualityScore(saved.getQualityScore())
-                .timestamp((String) result.get("timestamp"))
+                .timestamp(dto.getTimestamp())
                 .createdAt(saved.getCreatedAt())
                 .build();
     }
