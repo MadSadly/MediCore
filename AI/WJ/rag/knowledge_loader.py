@@ -43,7 +43,7 @@ def embed_documents(texts: list[str]) -> list[list[float]]:
     from vertexai.language_models import TextEmbeddingInput
     model = _get_embedding_model()
     inputs = [TextEmbeddingInput(t, task_type="RETRIEVAL_DOCUMENT") for t in texts]
-    results = model.get_embeddings(inputs, output_dimensionality=1024)
+    results = model.get_embeddings(inputs, output_dimensionality=768)
     return [r.values for r in results]
 
 

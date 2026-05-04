@@ -1,0 +1,58 @@
+# ================================================================
+# NJ 모듈 전용 requirements — 신부전(Kidney) 관리
+# ================================================================
+# AI/requirements.txt (공통) 대비 차이점:
+#   제거  — ultralytics, torchvision, opencv, grad-cam (Vision 전용)
+#           langchain, langgraph (NJ 운영 코드에서 미사용)
+#           psutil (미사용)
+#   추가  — imbalanced-learn  (SMOTE, 공통에 누락)
+#           xgboost           (분석 스크립트)
+#           matplotlib, seaborn (분석 스크립트)
+#           langchain-community, langchain-text-splitters (청킹 스크립트)
+#           pypdf             (PDF 로드)
+# ================================================================
+
+# ── API 서버 ────────────────────────────────────────────────────
+fastapi==0.110.0
+uvicorn==0.27.1
+python-multipart==0.0.9
+requests>=2.31.0
+
+# ── TabNet 분류 모델 ─────────────────────────────────────────────
+torch>=2.6.0
+pytorch-tabnet==4.1.0
+
+# ── 데이터 전처리 ────────────────────────────────────────────────
+scikit-learn==1.4.0
+pandas==2.2.0
+numpy>=1.26.0
+imbalanced-learn>=0.12.0   # SMOTE — 공통 requirements.txt에 누락된 패키지
+
+# ── RAG — 임베딩 (개발 모드: BGE-M3) ──────────────────────────────
+FlagEmbedding>=1.2.10
+
+# ── RAG — 벡터 DB ───────────────────────────────────────────────
+psycopg2-binary==2.9.9
+pgvector==0.2.5
+
+# ── Google Vertex AI (실전 모드 전용) ─────────────────────────────
+google-cloud-aiplatform==1.49.0
+google-auth==2.29.0
+
+# ── 유틸리티 ────────────────────────────────────────────────────
+python-dotenv==1.0.1
+
+# ================================================================
+# 아래는 학습·분석·임베딩 파이프라인 스크립트 전용
+# 운영 서버(dev_server.py) 실행 시에는 불필요
+# ================================================================
+
+# ── 모델 비교 분석 (analyze_kidney.py, analyze_kidney_extra.py) ──
+xgboost>=2.0.0
+matplotlib>=3.8.0
+seaborn>=0.13.0
+
+# ── 지식 청킹 + 임베딩 파이프라인 (chunk_and_embed.py) ──────────
+langchain-community>=0.0.34
+langchain-text-splitters>=0.0.1
+pypdf>=4.0.0
