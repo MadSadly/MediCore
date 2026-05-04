@@ -24,6 +24,29 @@ load_dotenv(_load_root / ".env")
 
 MODULE_TAG_EYES = "eyes"
 
+_DATABASE_URL_CACHE: str | None = None
+
+
+def _database_url() -> str:
+    """DATABASE_URL 단일 검증(.env 변경 시 프로세스 재시작 필요)."""
+    global _DATABASE_URL_CACHE
+    if _DATABASE_URL_CACHE is None:
+        u = os.getenv("DATABASE_URL")
+        if not u or not str(u).strip():
+            raise RuntimeError("DATABASE_URL 미설정")
+        _DATABASE_URL_CACHE = str(u).strip()
+    return _DATABASE_URL_CACHE
+
+
+def _expanded_bm25_query(query: str, disease_name: str, stage: int) -> str:
+    """Dense는 원문 query 유지 · BM25만 질환·stage 토큰으로 보강."""
+    q = " ".join((query or "").split())
+    dn = " ".join((disease_name or "").split())
+    base = f"{q} {dn}".strip()
+    suffix = f"stage {stage}" if stage is not None else ""
+    out = f"{base} {suffix}".strip()
+    return out if out else q
+
 
 def _tokenize(text: str) -> list[str]:
     return re.findall(r"[\w가-힣]+", (text or "").lower())
@@ -140,12 +163,10 @@ class HybridRetriever:
 
         import psycopg2
 
-        db_url = os.getenv("DATABASE_URL")
-        if not db_url:
-            raise RuntimeError("DATABASE_URL 미설정")
-
-        conn = psycopg2.connect(db_url)
+        rows_raw: list[Any] = []
+        conn = None
         try:
+            conn = psycopg2.connect(_database_url())
             with conn.cursor() as cur:
                 cur.execute(
                     """
@@ -159,7 +180,8 @@ class HybridRetriever:
                 )
                 rows_raw = cur.fetchall()
         finally:
-            conn.close()
+            if conn is not None:
+                conn.close()
 
         docs: list[dict[str, Any]] = [
             {
@@ -175,8 +197,9 @@ class HybridRetriever:
         if not docs:
             return []
 
+        bm25_q = _expanded_bm25_query(query, disease_name, stage)
         n = len(docs)
-        bm25_ord = _bm25_order(query, docs)
+        bm25_ord = _bm25_order(bm25_q, docs)
         fused_idx = _rrf_fuse(n, bm25_ord)
 
         out: list[dict[str, Any]] = []

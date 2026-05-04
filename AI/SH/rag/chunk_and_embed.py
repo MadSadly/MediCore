@@ -123,8 +123,6 @@ def detect_disease(filename: str) -> str:
 
 def insert_chunks(conn, chunks: list[dict], model: BGEM3FlagModel):
     """청크 임베딩 후 pgvector 삽입"""
-    cursor = conn.cursor()
-
     texts = [c["content"] for c in chunks]
     print(f"  임베딩 생성 중... ({len(texts)}개 청크)")
 
@@ -139,23 +137,33 @@ def insert_chunks(conn, chunks: list[dict], model: BGEM3FlagModel):
 
     print()
 
-    # DB 삽입
     inserted = 0
-    for chunk, embedding in zip(chunks, all_embeddings):
-        cursor.execute("""
-            INSERT INTO medical_knowledge
-                (module_tag, content, source, embedding)
-            VALUES (%s, %s, %s, %s)
-        """, (
-            MODULE_TAG,
-            chunk["content"],
-            chunk["source"],
-            embedding.tolist(),
-        ))
-        inserted += 1
+    cursor = None
+    try:
+        cursor = conn.cursor()
 
-    conn.commit()
-    cursor.close()
+        # DB 삽입
+        for chunk, embedding in zip(chunks, all_embeddings):
+            cursor.execute("""
+                INSERT INTO medical_knowledge
+                    (module_tag, content, source, embedding)
+                VALUES (%s, %s, %s, %s)
+            """, (
+                MODULE_TAG,
+                chunk["content"],
+                chunk["source"],
+                embedding.tolist(),
+            ))
+            inserted += 1
+
+        conn.commit()
+    except BaseException:
+        conn.rollback()
+        raise
+    finally:
+        if cursor is not None:
+            cursor.close()
+
     return inserted
 
 
@@ -189,58 +197,68 @@ def main():
     for f in pdf_files:
         print(f"  - {f.name}")
 
+    yn = input(
+        "\n기존 eyes 데이터를 삭제하고 재삽입합니다. 계속하시겠습니까? (y/n): "
+    ).strip().lower()
+    if yn != "y":
+        print("취소되었습니다.")
+        return
+
     # BGE-M3 모델 로드
     print("\n🔧 BGE-M3 모델 로드 중...")
     model = BGEM3FlagModel('BAAI/bge-m3', use_fp16=True)
     print("✅ 모델 로드 완료")
 
     # DB 연결
-    conn = psycopg2.connect(os.getenv("DATABASE_URL"))
-    print("✅ DB 연결 완료")
+    conn = None
+    try:
+        conn = psycopg2.connect(os.getenv("DATABASE_URL"))
+        print("✅ DB 연결 완료")
 
-    # 기존 eyes 데이터 초기화
-    print("\n🗑️  기존 eyes 데이터 초기화...")
-    clear_existing(conn)
+        # 기존 eyes 데이터 초기화
+        print("\n🗑️  기존 eyes 데이터 초기화...")
+        clear_existing(conn)
 
-    # PDF별 처리
-    total_inserted = 0
+        # PDF별 처리
+        total_inserted = 0
 
-    for pdf_path in sorted(pdf_files):
-        print(f"\n📄 처리 중: {pdf_path.name}")
+        for pdf_path in sorted(pdf_files):
+            print(f"\n📄 처리 중: {pdf_path.name}")
 
-        # 텍스트 추출
-        text = extract_text_from_pdf(pdf_path)
-        print(f"  텍스트 추출: {len(text):,}자")
+            # 텍스트 추출
+            text = extract_text_from_pdf(pdf_path)
+            print(f"  텍스트 추출: {len(text):,}자")
 
-        # 질환 태그
-        disease = detect_disease(pdf_path.name)
-        source  = f"AAO PPP - {pdf_path.stem}"
+            # 질환 태그
+            disease = detect_disease(pdf_path.name)
+            source  = f"AAO PPP - {pdf_path.stem}"
 
-        # 청킹
-        raw_chunks = semantic_chunk(text)
-        print(f"  청크 수: {len(raw_chunks)}개")
+            # 청킹
+            raw_chunks = semantic_chunk(text)
+            print(f"  청크 수: {len(raw_chunks)}개")
 
-        # 메타데이터 포함 청크 구성
-        chunks = [
-            {
-                "content": chunk,
-                "source":  f"{source} | disease:{disease}",
-            }
-            for chunk in raw_chunks
-        ]
+            # 메타데이터 포함 청크 구성
+            chunks = [
+                {
+                    "content": chunk,
+                    "source":  f"{source} | disease:{disease}",
+                }
+                for chunk in raw_chunks
+            ]
 
-        # 삽입
-        inserted = insert_chunks(conn, chunks, model)
-        total_inserted += inserted
-        print(f"  ✅ 삽입 완료: {inserted}개")
+            # 삽입
+            inserted = insert_chunks(conn, chunks, model)
+            total_inserted += inserted
+            print(f"  ✅ 삽입 완료: {inserted}개")
 
-    conn.close()
-
-    print("\n" + "=" * 60)
-    print(f"🎉 완료! 총 {total_inserted}개 청크 삽입")
-    print(f"   module_tag: {MODULE_TAG}")
-    print(f"   다음: retriever.py로 Hybrid RAG 구성")
-    print("=" * 60)
+        print("\n" + "=" * 60)
+        print(f"🎉 완료! 총 {total_inserted}개 청크 삽입")
+        print(f"   module_tag: {MODULE_TAG}")
+        print(f"   다음: retriever.py로 Hybrid RAG 구성")
+        print("=" * 60)
+    finally:
+        if conn is not None:
+            conn.close()
 
 
 if __name__ == "__main__":

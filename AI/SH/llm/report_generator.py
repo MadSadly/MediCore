@@ -42,7 +42,7 @@ async def generate_report_stream(
     citation_text = "\n".join([
         f"- [{c.source}] {c.title}: {c.content[:200]}"
         for c in citations
-    ]) if citations else "검색된 근거 문헌 없음"
+    ]) if citations else "RAG 검색 결과 없음 — 일반 임상 지식 기반으로 작성"
 
     prompt = f"""아래 사용자 데이터만 참고하여 임상 소견서를 작성하세요.
 
@@ -50,7 +50,7 @@ async def generate_report_stream(
 - 주요 질환: {dl_result.primary_disease.disease_name}
 - 확신도: {dl_result.primary_disease.confidence:.1%}
 - 중증도: {dl_result.stage.stage_name if dl_result.stage else '미분류'}
-- 모델 버전: {dl_result.model_version}
+- 모델 버전: {dl_result.model_version or "unknown"}
 - 응급 여부: {'응급 — ' + (emergency.reason or '') if emergency.is_emergency else '비응급'}
 
 [의사 임상 소견]
@@ -60,13 +60,11 @@ async def generate_report_stream(
 {citation_text}
 """
 
-    loop = asyncio.get_running_loop()
-    response = await loop.run_in_executor(
-        None,
-        lambda: model.generate_content(prompt, stream=True),
-    )
+    def _collect_stream_chunks():
+        return list(model.generate_content(prompt, stream=True))
 
-    for chunk in response:
+    chunks = await asyncio.to_thread(_collect_stream_chunks)
+    for chunk in chunks:
         if getattr(chunk, "text", None):
             yield chunk.text
             await asyncio.sleep(0)
