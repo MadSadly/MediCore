@@ -4,6 +4,7 @@ import os
 import time
 from typing import Optional
 
+import numpy as np
 import torch
 from monai.inferers import sliding_window_inference
 from monai.networks.nets import UNet
@@ -12,6 +13,8 @@ from WJ.core.preprocessing import preprocess_nifti
 
 _model: Optional[UNet] = None
 _device: Optional[torch.device] = None
+_last_image_np: Optional[np.ndarray] = None
+_last_prob_map_np: Optional[np.ndarray] = None
 
 _CHECKPOINT_DEFAULT = os.path.join(os.path.dirname(__file__), "..", "checkpoints", "best_model_v2.pth")
 
@@ -52,9 +55,8 @@ def load_model(checkpoint_path: str = _CHECKPOINT_DEFAULT) -> tuple[UNet, torch.
 
     try:
         ckpt = torch.load(checkpoint_path, map_location=_device)
-        model.load_state_dict(ckpt["model_state_dict"])
-    except KeyError as e:
-        raise RuntimeError(f"체크포인트 구조 불일치 — 'model_state_dict' 키 없음: {e}") from e
+        state_dict = ckpt["model_state_dict"] if isinstance(ckpt, dict) and "model_state_dict" in ckpt else ckpt
+        model.load_state_dict(state_dict)
     except Exception as e:
         raise RuntimeError(f"가중치 로드 실패: {e}") from e
 
@@ -80,6 +82,13 @@ def _confidence_from_fraction(frac: float, is_tumor: bool) -> float:
     else:
         raw = 1.0 - min(frac / TUMOR_VOL_THR, 1.0)
     return 0.5 + raw * 0.5
+
+
+def get_last_inference_data() -> Optional[tuple]:
+    """마지막 추론의 (image_np, prob_map_np) 반환. 추론 전이면 None."""
+    if _last_image_np is None or _last_prob_map_np is None:
+        return None
+    return _last_image_np.copy(), _last_prob_map_np.copy()
 
 
 def predict_tumor(nifti_path: str) -> dict:
@@ -120,6 +129,10 @@ def predict_from_tensor(tensor: torch.Tensor) -> dict:
         )
         prob_map = torch.softmax(logits, dim=1)[0, 1]  # tumor channel: (H, W, D)
         image = x[0, 0]                                 # (H, W, D)
+
+    global _last_image_np, _last_prob_map_np
+    _last_image_np = image.cpu().numpy()
+    _last_prob_map_np = prob_map.cpu().numpy()
 
     frac = _tumor_fraction(prob_map, image)
     is_tumor = frac > TUMOR_VOL_THR
