@@ -42,4 +42,5 @@ build/
 .gradle/
 # exe
 MS_run_all.bat
+run_SH.bat
 
