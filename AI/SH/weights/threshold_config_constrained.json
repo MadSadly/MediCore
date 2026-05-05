@@ -1,0 +1,99 @@
+{
+  "source_split": "val",
+  "objective": "per_class_constrained_f1_max_ovr",
+  "rules": {
+    "recall_floor_classes": [
+      "glaucoma",
+      "amd"
+    ],
+    "recall_floor": 0.85,
+    "precision_floor_classes": [
+      "normal",
+      "cataract",
+      "dr"
+    ],
+    "precision_floor": 0.6,
+    "infeasible_fallback": "unconstrained_best_f1_on_same_grid"
+  },
+  "threshold_grid": {
+    "min": 0.02,
+    "max": 0.98,
+    "n_steps": 49
+  },
+  "class_names": {
+    "0": "normal",
+    "1": "glaucoma",
+    "2": "cataract",
+    "3": "dr",
+    "4": "amd"
+  },
+  "thresholds_by_index": {
+    "0": 0.98,
+    "1": 0.98,
+    "2": 0.98,
+    "3": 0.98,
+    "4": 0.98
+  },
+  "per_class_val": {
+    "normal": {
+      "class_index": 0,
+      "constraint_mode": "precision_floor_f1_max",
+      "threshold": 0.98,
+      "n_positive_val": 564,
+      "f1_val": 0.821376281112738,
+      "precision_val": 0.699501246882793,
+      "recall_val": 0.9946808510638298,
+      "constraint_feasible": true,
+      "constraint": "precision>=0.6"
+    },
+    "glaucoma": {
+      "class_index": 1,
+      "constraint_mode": "recall_floor_f1_max",
+      "threshold": 0.98,
+      "n_positive_val": 773,
+      "f1_val": 0.8907168037602821,
+      "precision_val": 0.8159311087190527,
+      "recall_val": 0.9805950840879689,
+      "constraint_feasible": true,
+      "constraint": "recall>=0.85"
+    },
+    "cataract": {
+      "class_index": 2,
+      "constraint_mode": "precision_floor_f1_max",
+      "threshold": 0.98,
+      "n_positive_val": 48,
+      "f1_val": 0.12749003984063745,
+      "precision_val": 0.06808510638297872,
+      "recall_val": 1.0,
+      "constraint_feasible": false,
+      "fallback": "unconstrained_best_f1_on_grid",
+      "constraint_attempted": "precision>=0.6"
+    },
+    "dr": {
+      "class_index": 3,
+      "constraint_mode": "precision_floor_f1_max",
+      "threshold": 0.98,
+      "n_positive_val": 547,
+      "f1_val": 0.7360441075120606,
+      "precision_val": 0.5907079646017699,
+      "recall_val": 0.9762340036563071,
+      "constraint_feasible": false,
+      "fallback": "unconstrained_best_f1_on_grid",
+      "constraint_attempted": "precision>=0.6"
+    },
+    "amd": {
+      "class_index": 4,
+      "constraint_mode": "recall_floor_f1_max",
+      "threshold": 0.98,
+      "n_positive_val": 24,
+      "f1_val": 0.08602150537634409,
+      "precision_val": 0.0449438202247191,
+      "recall_val": 1.0,
+      "constraint_feasible": true,
+      "constraint": "recall>=0.85"
+    }
+  },
+  "val_macro_f1_ovr_constrained": 0.5323297475204124,
+  "val_macro_f1_ovr_sigmoid_0_5": 0.4343603116020677,
+  "leakage_policy": "Fit thresholds on val only; do not use test for selection."
+}

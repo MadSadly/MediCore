@@ -52,11 +52,9 @@ async def lifespan(app):
         print("✅ EyeModel 워밍업 완료")
     except Exception as e:
         print(f"⚠️ EyeModel 워밍업 실패: {e}")
-    try:
-        hybrid_retriever.load()
-        print("✅ HybridRetriever (BGE-M3) 워밍업 완료")
-    except Exception as e:
-        print(f"⚠️ HybridRetriever 워밍업 실패: {e}")
+    # BGE-M3(HF) 기동 시 로드하면 Hugging Face 다운로드/로딩으로 lifespan이 수십 분~멈춤처럼 보일 수 있음.
+    # HybridRetriever는 search() 첫 호출 시 _ensure_model()으로 지연 로드됨.
+    print("ℹ️ HybridRetriever(BGE-M3)는 첫 RAG 검색 시 로드됩니다.")
     try:
         graph_builder.load()
         print("✅ GraphBuilder 캐시 초기화 완료")
