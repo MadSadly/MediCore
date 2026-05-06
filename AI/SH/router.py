@@ -66,8 +66,12 @@ async def lifespan(app):
 # ── 헬스체크 ──────────────────────────────────────────────────
 @router.get("/health")
 async def health():
-    return {"status": "ok", "module": "eyes", "model_loaded": eye_model._loaded}
-
+    return {
+        "status":        "ok",
+        "module":        "eyes",
+        "model_loaded":  eye_model._loaded,
+        "gradcam_loaded": gradcam_engine._loaded,   # ← 추가
+    }
 
 # ── 메인 분석 엔드포인트 (SSE 스트리밍) ──────────────────────
 @router.post("/analyze")
