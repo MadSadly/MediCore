@@ -3,8 +3,8 @@ import { useParams } from 'react-router-dom'
 import { Niivue } from '@niivue/niivue'
 import axios from 'axios'
 
-const AI_URL = import.meta.env.VITE_AI_URL || 'http://localhost:8000'
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8080'
+const AI_URL = import.meta.env.VITE_AI_URL || ''
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || ''
 
 const C = {
   bg:     '#080808',
@@ -109,10 +109,9 @@ export default function BrainTumorPage() {
 
   const activeSess = sessions.find(s => s.key === activeKey) ?? null
 
-  // ── Init Niivue ──
-  useEffect(() => {
-    if (phase !== 'viewer') return
-    if (!nvCanvasRef.current || nvRef.current) return
+  // ── Init Niivue (lazy — canvas must be display:block when called) ──
+  const initNiivue = useCallback(() => {
+    if (nvRef.current || !nvCanvasRef.current) return
     const nv = new Niivue({
       backColor: [0.05, 0.07, 0.09, 1],
       show3Dcrosshair: false,
@@ -121,7 +120,7 @@ export default function BrainTumorPage() {
     })
     nv.attachToCanvas(nvCanvasRef.current)
     nvRef.current = nv
-  }, [phase])
+  }, [])
 
   // ── Wheel scroll ──
   useEffect(() => {
@@ -132,10 +131,11 @@ export default function BrainTumorPage() {
       const key = activeKeyRef.current
       setSessions(prev => {
         const sess = prev.find(s => s.key === key)
-        if (!sess || !sess.sliceCount || sess.viewMode === '3d') return prev
+        if (!sess || sess.viewMode === '3d') return prev
         const effCount = sess.highlightOn && sess.maskReady && sess.axis
           ? (sess.highlightAxisCache[sess.axis] || sess.sliceCount)
           : sess.sliceCount
+        if (!effCount) return prev
         const next = Math.max(0, Math.min(effCount - 1, sess.currentIndex + (e.deltaY > 0 ? 1 : -1)))
         return prev.map(s => s.key === key ? { ...s, currentIndex: next } : s)
       })
@@ -223,7 +223,7 @@ export default function BrainTumorPage() {
 
   // ── 3D (supports highlight) ──
   const handle3D = async (forceHighlight) => {
-    if (!activeSess?.file || !nvRef.current) return
+    if (!activeSess?.file) return
     const key = activeSess.key
     const useHL = forceHighlight !== undefined
       ? forceHighlight
@@ -236,13 +236,17 @@ export default function BrainTumorPage() {
           url: `${AI_URL}/ai/brain/preprocessed/${activeSess.fileId}/preprocessed.nii`,
           name: 'preprocessed.nii',
           colormap: 'gray',
-          opacity: 0.35,
+          opacity: 1.0,
+          cal_min: 0.001,
+          cal_max: 1.0,
         },
         {
           url: `${AI_URL}/ai/brain/mask/${activeSess.fileId}/mask.nii`,
           name: 'mask.nii',
-          colormap: 'warm',
-          opacity: 0.9,
+          colormap: 'hot',
+          opacity: 0.6,
+          cal_min: 0.5,
+          cal_max: 1.0,
         },
       ]
     } else {
@@ -250,13 +254,25 @@ export default function BrainTumorPage() {
       volumes = [{ url, name: activeSess.file.name, colormap: 'gray', opacity: 1.0 }]
     }
 
+    // 캔버스를 display:block으로 만들기 위해 먼저 3D 모드로 전환
+    updateSess(key, { viewMode: '3d', errorMsg: '' })
+
+    // React가 캔버스를 DOM에 그릴 때까지 대기
+    await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))
+
+    // 캔버스가 보이는 상태에서 Niivue 지연 초기화
+    initNiivue()
+    if (!nvRef.current) {
+      updateSess(key, { viewMode: '2d', errorMsg: '3D 초기화에 실패했습니다.' })
+      return
+    }
+
     try {
       await nvRef.current.loadVolumes(volumes)
       nvRef.current.setSliceType(4)
-      updateSess(key, { viewMode: '3d', errorMsg: '' })
     } catch (err) {
       console.error('3D 렌더링 오류:', err)
-      updateSess(key, { errorMsg: '3D 렌더링에 실패했습니다: ' + (err?.message || String(err)) })
+      updateSess(key, { viewMode: '2d', errorMsg: '3D 렌더링에 실패했습니다: ' + (err?.message || String(err)) })
     }
   }
 
@@ -434,6 +450,7 @@ export default function BrainTumorPage() {
     <div style={{
       display: 'flex', flexDirection: 'column',
       height: '100%',
+      overflowY: 'auto',
       background: C.bg, color: C.text,
       fontFamily: 'system-ui, -apple-system, sans-serif',
     }}>
@@ -480,7 +497,7 @@ export default function BrainTumorPage() {
       </div>
 
       {/* ════ 3-PANEL BODY ════ */}
-      <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
+      <div style={{ display: 'flex', flex: '0 0 auto', height: 'calc(100vh - 36px)', minHeight: 500 }}>
 
         {/* ── LEFT: 2D/3D + Axis + Highlight ── */}
         <div style={{
@@ -644,13 +661,13 @@ export default function BrainTumorPage() {
           {/* Main image area */}
           <div ref={sliceViewRef} style={{ flex: 1, position: 'relative', background: '#050505', overflow: 'hidden' }}>
 
-            {/* Niivue 3D — always in DOM so canvas keeps its dimensions for WebGL init */}
-            <div style={{ position: 'absolute', inset: 0, zIndex: activeSess?.viewMode === '3d' ? 1 : 0 }}>
+            {/* Niivue 3D — display:none when 2D so WebGL doesn't bleed over HTML layers */}
+            <div style={{ position: 'absolute', inset: 0, display: activeSess?.viewMode === '3d' ? 'block' : 'none' }}>
               <canvas ref={nvCanvasRef} style={{ width: '100%', height: '100%' }} />
             </div>
 
             {/* 2D slice */}
-            <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: activeSess?.viewMode === '3d' ? 0 : 1 }}>
+            <div style={{ position: 'absolute', inset: 0, display: activeSess?.viewMode === '3d' ? 'none' : 'flex', alignItems: 'center', justifyContent: 'center' }}>
               {sliceUrl
                 ? <img
                     src={sliceUrl}

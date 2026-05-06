@@ -87,20 +87,36 @@ def _save_tumor_artifacts(image_np: np.ndarray, prob_map_np: np.ndarray, file_di
 
     affine = np.eye(4)  # 1mm isotropic, preprocessed space
 
-    # 전처리된 MRI NIfTI 저장 (3D Niivue 오버레이용)
-    pre_nii = nib.Nifti1Image(image_np.astype(np.float32), affine)
+    # 3D Niivue 뷰어용 NIfTI: 뇌 복셀에 min-max 정규화 적용 (배경=0 유지)
+    # z-score 값을 그대로 쓰면 cal_min/cal_max로 배경 제외 불가능 → [0,1] 재정규화
+    image_for_3d = image_np.astype(np.float32).copy()
+    brain_mask = image_for_3d != 0
+    if brain_mask.any():
+        brain_vals = image_for_3d[brain_mask]
+        vmin_3d = np.percentile(brain_vals, 1)
+        vmax_3d = np.percentile(brain_vals, 99)
+        if vmax_3d > vmin_3d:
+            image_for_3d[brain_mask] = np.clip(
+                (brain_vals - vmin_3d) / (vmax_3d - vmin_3d), 0.001, 1.0
+            )
+        else:
+            image_for_3d[brain_mask] = 0.5
+    pre_nii = nib.Nifti1Image(image_for_3d, affine)
     nib.save(pre_nii, str(file_dir / "preprocessed.nii"))
 
     # 종양 확률 맵 NIfTI 저장 (float32 0-1, Niivue colormap용)
     mask_nii = nib.Nifti1Image(prob_map_np.astype(np.float32), affine)
     nib.save(mask_nii, str(file_dir / "mask.nii"))
 
+    # PNG 슬라이스용: z-score 음수값 클리핑 (배경=0 → 검은색)
+    image_display = np.clip(image_np, 0, None)
+
     # 하이라이트 슬라이스 PNG 생성 (3축)
     counts = {}
     axes_config = {
-        "axial":    [(image_np[:, :, i], prob_map_np[:, :, i]) for i in range(image_np.shape[2])],
-        "coronal":  [(image_np[:, i, :], prob_map_np[:, i, :]) for i in range(image_np.shape[1])],
-        "sagittal": [(image_np[i, :, :], prob_map_np[i, :, :]) for i in range(image_np.shape[0])],
+        "axial":    [(image_display[:, :, i], prob_map_np[:, :, i]) for i in range(image_display.shape[2])],
+        "coronal":  [(image_display[:, i, :], prob_map_np[:, i, :]) for i in range(image_display.shape[1])],
+        "sagittal": [(image_display[i, :, :], prob_map_np[i, :, :]) for i in range(image_display.shape[0])],
     }
 
     for axis, slice_pairs in axes_config.items():

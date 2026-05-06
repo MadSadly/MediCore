@@ -40,7 +40,7 @@ public class EyeController {
         request.setHasHypertension(hasHypertension);
         request.setClinicalNote(clinicalNote);
 
-        String token = authHeader.replace("Bearer ", "");
+        String token = authHeader.replaceFirst("(?i)^Bearer\\s+", "");
         EyeDiagnosisResponse response = service.analyze(image, request, token);
         return ResponseEntity.ok(response);
     }

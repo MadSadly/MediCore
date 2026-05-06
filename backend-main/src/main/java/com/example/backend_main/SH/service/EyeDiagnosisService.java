@@ -1,5 +1,6 @@
 package com.example.backend_main.SH.service;
 
+import com.example.backend_main.SH.dto.AiSyncResponse;
 import com.example.backend_main.SH.dto.EyeDiagnosisHistoryResponse;
 import com.example.backend_main.SH.dto.EyeDiagnosisRequest;
 import com.example.backend_main.SH.dto.EyeDiagnosisResponse;
@@ -9,16 +10,18 @@ import com.example.backend_main.SH.repository.EyeDiagnosisRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.*;
 import org.springframework.stereotype.Service;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
 import org.springframework.web.client.HttpStatusCodeException;
+import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.nio.charset.StandardCharsets;
 import java.util.List;
-import java.util.Map;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -41,7 +44,7 @@ public class EyeDiagnosisService {
             EyeDiagnosisRequest request,
             String authToken
     ) {
-        String aiUrl = aiServerUrl + "/sh/analyze";
+        String aiUrl = aiServerUrl + "/sh/analyze/sync";
 
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.MULTIPART_FORM_DATA);
@@ -57,41 +60,124 @@ public class EyeDiagnosisService {
 
         HttpEntity<MultiValueMap<String, Object>> entity = new HttpEntity<>(body, headers);
 
-        final ResponseEntity<Map> aiResponse;
+        log.info("AI 서버 호출 시작 | url={} patientId={}", aiUrl, request.getPatientId());
+
+        final ResponseEntity<AiSyncResponse> aiResponse;
         try {
             aiResponse = restTemplate.exchange(
-                    aiUrl, HttpMethod.POST, entity, Map.class
+                    aiUrl,
+                    HttpMethod.POST,
+                    entity,
+                    new ParameterizedTypeReference<AiSyncResponse>() {}
             );
         } catch (HttpStatusCodeException ex) {
+            log.error(
+                    "AI 서버 HTTP 오류 | url={} patientId={} status={} responseBody={}",
+                    aiUrl,
+                    request.getPatientId(),
+                    ex.getStatusCode(),
+                    ex.getResponseBodyAsString(StandardCharsets.UTF_8),
+                    ex
+            );
             throw EyeAiServerException.from(ex);
+        } catch (RestClientException ex) {
+            log.error("AI 서버 연결 실패 | url={} patientId={}", aiUrl, request.getPatientId(), ex);
+            throw new RuntimeException("AI 서버 연결 실패", ex);
         }
 
         if (!aiResponse.getStatusCode().is2xxSuccessful() || aiResponse.getBody() == null) {
+            log.warn(
+                    "AI 서버 응답 비정상 | url={} patientId={} status={}",
+                    aiUrl,
+                    request.getPatientId(),
+                    aiResponse.getStatusCode()
+            );
             throw new RuntimeException("AI 서버 응답 오류");
         }
 
-        Map<String, Object> result = aiResponse.getBody();
+        log.info(
+                "AI 서버 응답 수신 | status={} patientId={}",
+                aiResponse.getStatusCode(),
+                request.getPatientId()
+        );
 
-        Map<String, Object> dlResult = (Map<String, Object>) result.get("dl_result");
-        Map<String, Object> primary = (Map<String, Object>) dlResult.get("primary_disease");
-        Map<String, Object> stage = (Map<String, Object>) dlResult.get("stage");
-        Map<String, Object> emergency = (Map<String, Object>) result.get("emergency");
+        AiSyncResponse dto = aiResponse.getBody();
+        if (dto == null) {
+            throw new RuntimeException("AI 서버 응답 오류");
+        }
+
+        AiSyncResponse.AiDlResult dlResultObj = dto.getDlResult();
+        if (dlResultObj == null) {
+            throw new IllegalStateException("AI 응답에 dl_result가 없거나 형식이 올바르지 않습니다.");
+        }
+
+        AiSyncResponse.AiPrimaryDisease primary = dlResultObj.getPrimaryDisease();
+        if (primary == null) {
+            throw new IllegalStateException("AI 응답에 primary_disease가 없습니다.");
+        }
+
+        String diseaseName = primary.getDiseaseName();
+        if (diseaseName == null || diseaseName.isBlank()) {
+            throw new IllegalStateException("AI 응답 disease_name이 비어 있습니다.");
+        }
+
+        Double confidenceObj = primary.getConfidence();
+        if (confidenceObj == null) {
+            throw new IllegalStateException("AI 응답 primary_disease.confidence가 없거나 숫자가 아닙니다.");
+        }
+        double confidence = confidenceObj;
+
+        Double infObj = dto.getInferenceTimeMs();
+        if (infObj == null) {
+            throw new IllegalStateException("AI 응답 inference_time_ms가 없거나 숫자가 아닙니다.");
+        }
+        double inferenceTimeMs = infObj;
+
+        String sessionId = dto.getSessionId();
+        sessionId = sessionId != null ? sessionId.trim() : "";
+        if (sessionId.isEmpty()) {
+            throw new IllegalStateException("AI 응답 session_id가 비어 있습니다.");
+        }
+
+        String report = dto.getReport() != null ? dto.getReport() : "";
+
+        String modelVersion = dlResultObj.getModelVersion();
+        if (modelVersion == null || modelVersion.isBlank()) {
+            modelVersion = "unknown";
+        }
+
+        String gradcam =
+                dlResultObj.getGradcamBase64() != null ? dlResultObj.getGradcamBase64() : null;
+
+        boolean isEmergency = false;
+        String emergencyReason = null;
+        AiSyncResponse.AiEmergency emergency = dto.getEmergency();
+        if (emergency != null) {
+            Boolean ie = emergency.getIsEmergency();
+            if (ie != null) {
+                isEmergency = ie;
+            }
+            emergencyReason = emergency.getReason();
+        }
+
+        Double qualityScore = dto.getQualityScore();
+
+        AiSyncResponse.AiStage stage = dlResultObj.getStage();
 
         EyeDiagnosis saved = repository.save(EyeDiagnosis.builder()
                 .patientId(request.getPatientId())
-                .sessionId((String) result.get("session_id"))
-                .primaryDisease((String) primary.get("disease_name"))
-                .confidence(((Number) primary.get("confidence")).doubleValue())
-                .stage(stage != null ? (Integer) stage.get("stage") : null)
-                .stageName(stage != null ? (String) stage.get("stage_name") : null)
-                .isEmergency((Boolean) emergency.get("is_emergency"))
-                .emergencyReason((String) emergency.get("reason"))
-                .gradcamBase64((String) dlResult.get("gradcam_base64"))
-                .report((String) result.get("report"))
-                .inferenceTimeMs(((Number) result.get("inference_time_ms")).doubleValue())
-                .qualityScore(result.get("quality_score") != null
-                        ? ((Number) result.get("quality_score")).doubleValue() : null)
-                .modelVersion((String) dlResult.get("model_version"))
+                .sessionId(sessionId)
+                .primaryDisease(diseaseName)
+                .confidence(confidence)
+                .stage(stage != null ? stage.getStage() : null)
+                .stageName(stage != null && stage.getStageName() != null ? stage.getStageName() : null)
+                .isEmergency(isEmergency)
+                .emergencyReason(emergencyReason)
+                .gradcamBase64(gradcam)
+                .report(report)
+                .inferenceTimeMs(inferenceTimeMs)
+                .qualityScore(qualityScore)
+                .modelVersion(modelVersion)
                 .build()
         );
 
@@ -112,7 +198,7 @@ public class EyeDiagnosisService {
                 .report(saved.getReport())
                 .inferenceTimeMs(saved.getInferenceTimeMs())
                 .qualityScore(saved.getQualityScore())
-                .timestamp((String) result.get("timestamp"))
+                .timestamp(dto.getTimestamp())
                 .createdAt(saved.getCreatedAt())
                 .build();
     }

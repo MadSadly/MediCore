@@ -18,7 +18,7 @@ import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from SH.router import router, lifespan
+from .router import router, lifespan
 
 app = FastAPI(
     title="안과 CDSS — SH 로컬 개발 서버",
@@ -32,6 +32,14 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+# Spring WorkerHealthScheduler 가 {BASE_URL}/health 만 호출함.
+# 라우터는 /sh prefix 이므로 /sh/health 만 있으면 백엔드 헬스는 항상 실패함.
+@app.get("/health")
+async def root_health():
+    return {"status": "ok", "module": "eyes", "server": "SH.dev_server"}
+
 
 app.include_router(router)
 

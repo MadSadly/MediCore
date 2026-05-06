@@ -9,12 +9,14 @@ AI/SH/core/quality_check.py
   3. 이미지 디코딩
   4. 해상도 (512px 미만 거부)
   5. 종횡비 (1.5 초과 거부)
-  6. Red 채널 우세 검증 (안저 고유 색상)
-  7. 안저 유효 영역 마스킹
+  6. 안저 유효 영역 마스킹
+  7. Red 채널 우세 검증 (안저 고유 색상, 마스킹 영역만)
   8. 평균 밝기 (과노출/저노출)
   9. Laplacian 블러 감지 (핵심)
  10. 추론 후 OOD 차단 (별도 함수)
 """
+
+import os
 
 import cv2
 import numpy as np
@@ -24,7 +26,9 @@ from ..schemas.response import ImageQualityResult, ErrorCode
 
 
 # ── 임계값 설정 ───────────────────────────────────────────────
-LAPLACIAN_THRESHOLD   = 100.0   # 블러 감지 임계값
+# Laplacian 분산: 마스크 안저 영역 기준. 낮을수록 흐림.
+# 100은 실촬영·압축 이미지에서 자주 걸려 기본 70 (엄격: .env 에 SH_LAPLACIAN_THRESHOLD=100)
+LAPLACIAN_THRESHOLD = float(os.getenv("SH_LAPLACIAN_THRESHOLD", "70.0"))
 MIN_RESOLUTION        = 512     # 최소 단변 해상도
 MAX_ASPECT_RATIO      = 1.5     # 최대 종횡비 (안저는 거의 1:1)
 MAX_FILE_SIZE_MB      = 20      # 최대 파일 크기

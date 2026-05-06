@@ -17,8 +17,10 @@ from __future__ import annotations
 import json
 import os
 import pickle
+import random
 import re
 import sys
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -89,27 +91,68 @@ def _strip_json_fence(text: str) -> str:
     return s
 
 
+def _is_rate_limit_error(exc: BaseException) -> bool:
+    """429 · ResourceExhausted 등 할당량/속도 제한."""
+    try:
+        from google.api_core.exceptions import ResourceExhausted
+
+        if isinstance(exc, ResourceExhausted):
+            return True
+    except ImportError:
+        pass
+
+    tn = type(exc).__name__.lower()
+    if "resourceexhausted" in tn:
+        return True
+    blob = str(exc).lower()
+    return (
+        "429" in blob
+        or "resource exhausted" in blob
+        or "too many requests" in blob
+        or ("quota" in blob and "exceed" in blob)
+    )
+
+
 def _extract_entities_json(genai_module, chunk_id: int, content: str) -> dict | None:
     model = genai_module.GenerativeModel(GEMINI_MODEL)
     body = content[:MAX_CONTENT_CHARS]
     prompt = EXTRACTION_PROMPT.format(chunk_id=chunk_id, text=body)
-    try:
-        resp = model.generate_content(
-            prompt,
-            generation_config={
-                "temperature": 0.1,
-                "max_output_tokens": 2048,
-            },
-        )
-        raw = getattr(resp, "text", None) or ""
-        if not raw.strip() and resp.candidates:
-            parts = getattr(resp.candidates[0].content, "parts", []) or []
-            raw = "".join(getattr(p, "text", "") for p in parts)
-        cleaned = _strip_json_fence(raw)
-        return json.loads(cleaned)
-    except Exception as e:
-        print(f"  ⚠️ chunk id={chunk_id} 스킵: {e}")
-        return None
+    max_attempts = 4
+    base = 30.0
+
+    for attempt in range(max_attempts):
+        try:
+            resp = model.generate_content(
+                prompt,
+                generation_config={
+                    "temperature": 0.1,
+                    "max_output_tokens": 2048,
+                },
+            )
+            raw = getattr(resp, "text", None) or ""
+            if not raw.strip() and resp.candidates:
+                parts = getattr(resp.candidates[0].content, "parts", []) or []
+                raw = "".join(getattr(p, "text", "") for p in parts)
+            cleaned = _strip_json_fence(raw)
+            return json.loads(cleaned)
+        except Exception as e:
+            if _is_rate_limit_error(e):
+                if attempt + 1 < max_attempts:
+                    jitter = random.uniform(0, 10)
+                    wait = min(base * (2**attempt) + jitter, 300.0)
+                    print(
+                        f"  ⏳ rate limit (chunk id={chunk_id}) "
+                        f"attempt={attempt + 1}/{max_attempts} · {wait:.1f}s 대기",
+                        flush=True,
+                    )
+                    time.sleep(wait)
+                    continue
+                print(f"  ⚠️ chunk id={chunk_id} 재시도 후 포기 · 스킵")
+                return None
+            print(f"  ⚠️ chunk id={chunk_id} 스킵: {e}")
+            return None
+
+    return None
 
 
 def _apply_payload_to_graph(
@@ -187,6 +230,50 @@ def fetch_chunks(conn) -> list[tuple[int, str, str]]:
     return [(int(r[0]), str(r[1] or ""), str(r[2] or "")) for r in rows]
 
 
+def _load_processed_from_entities_jsonl() -> tuple[set[int], nx.MultiDiGraph, list[int]]:
+    """기존 JSONL에서 처리된 chunk_id 집합 + 그래프 리플레이."""
+    ids: set[int] = set()
+    G = nx.MultiDiGraph()
+    edge_ctr: list[int] = [0]
+
+    if not ENTITIES_JSONL.exists():
+        return ids, G, edge_ctr
+
+    with ENTITIES_JSONL.open("r", encoding="utf-8") as fin:
+        for lineno, raw in enumerate(fin, start=1):
+            raw = raw.strip()
+            if not raw:
+                continue
+            try:
+                obj = json.loads(raw)
+                cid = int(obj["chunk_id"])
+                ids.add(cid)
+                payload = obj.get("payload")
+                if isinstance(payload, dict):
+                    _apply_payload_to_graph(G, payload, fallback_chunk_id=cid, _edge_ctr=edge_ctr)
+            except (KeyError, TypeError, ValueError, json.JSONDecodeError) as e:
+                print(f"⚠️  entities.jsonl 스킵 (line {lineno}): {e}", file=sys.stderr)
+
+    return ids, G, edge_ctr
+
+
+def _check_integrity(processed_ids: set[int], db_chunk_ids: set[int]) -> None:
+    """JSONL chunk_id와 DB id 집합 불일치 시 경고 로그."""
+    only_in_jsonl = processed_ids - db_chunk_ids
+    only_in_db = db_chunk_ids - processed_ids
+    if only_in_jsonl:
+        print(
+            f"⚠️  [무결성] JSONL에만 있고 DB에 없는 chunk_id {len(only_in_jsonl)}개: "
+            f"{sorted(only_in_jsonl)[:10]}{'...' if len(only_in_jsonl) > 10 else ''}",
+            file=sys.stderr,
+        )
+    if only_in_db:
+        print(
+            f"ℹ️  [무결성] DB에 있으나 미처리 chunk_id {len(only_in_db)}개 "
+            f"(이번 실행에서 처리 예정)"
+        )
+
+
 def main():
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     db_url = os.getenv("DATABASE_URL")
@@ -202,14 +289,24 @@ def main():
     finally:
         conn.close()
 
-    print(f"📄 청크 {len(chunks)}건 처리 시작 (모델={GEMINI_MODEL})")
+    processed_ids, G, edge_ctr = _load_processed_from_entities_jsonl()
+    db_chunk_ids = {cid for cid, _, _ in chunks}
+    _check_integrity(processed_ids, db_chunk_ids)
 
-    G = nx.MultiDiGraph()
-    edge_ctr = [0]
-    written_lines = []
+    resumed_n = len(processed_ids)
 
-    with ENTITIES_JSONL.open("w", encoding="utf-8") as fout:
+    print(f"📄 청크 {len(chunks)}건 (DB) · 이미 처리된 청크 {resumed_n}개 스킵")
+    print(f"   모델={GEMINI_MODEL}")
+
+    chunks_extracted_prev = resumed_n
+
+    mode = "a" if resumed_n > 0 else "w"
+    with ENTITIES_JSONL.open(mode, encoding="utf-8") as fout:
         for idx, (cid, content, source) in enumerate(chunks):
+            if cid in processed_ids:
+                print(f"  skip {idx + 1}/{len(chunks)} id={cid} (already in jsonl)", end="\r")
+                continue
+
             payload = _extract_entities_json(genai_module, cid, content)
             if payload is None:
                 continue
@@ -218,13 +315,21 @@ def main():
                 ensure_ascii=False,
             )
             fout.write(line + "\n")
-            written_lines.append(line)
+            fout.flush()
+            processed_ids.add(cid)
             _apply_payload_to_graph(G, payload, fallback_chunk_id=cid, _edge_ctr=edge_ctr)
             print(f"  ok {idx + 1}/{len(chunks)} id={cid}", end="\r")
+            time.sleep(1.0)
         print()
 
     with GRAPH_PKL.open("wb") as f:
         pickle.dump(G, f, protocol=pickle.HIGHEST_PROTOCOL)
+
+    try:
+        with ENTITIES_JSONL.open(encoding="utf-8") as fcount:
+            jsonl_lines = sum(1 for line in fcount if line.strip())
+    except OSError:
+        jsonl_lines = chunks_extracted_prev
 
     utc_now = datetime.now(timezone.utc).isoformat()
     meta = {
@@ -232,7 +337,9 @@ def main():
         "module_tag": MODULE_TAG,
         "model": GEMINI_MODEL,
         "chunk_total_in_db": len(chunks),
-        "chunks_extracted_ok": len(written_lines),
+        "chunks_resume_skipped": resumed_n,
+        "chunks_extracted_ok": jsonl_lines,
+        "chunks_new_this_run_approx": jsonl_lines - chunks_extracted_prev,
         "nodes": int(G.number_of_nodes()),
         "edges": int(G.number_of_edges()),
     }

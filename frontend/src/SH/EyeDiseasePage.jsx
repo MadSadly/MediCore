@@ -6,7 +6,7 @@
  *           → report_chunk* → done
  */
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { useParams } from "react-router-dom";
 import { analyzeEye } from "./api/eyeApi";
 import ImageUpload from "./components/ImageUpload";
@@ -14,6 +14,8 @@ import DiagnosisResult from "./components/DiagnosisResult";
 import GradCAMViewer from "./components/GradCAMViewer";
 import ReportStream from "./components/ReportStream";
 import EmergencyModal from "./components/EmergencyModal";
+import AnalysisStepper from "./components/AnalysisStepper";
+import AiDisclaimer from "./components/AiDisclaimer";
 
 const STEPS = {
   IDLE:            "idle",
@@ -44,9 +46,31 @@ function isAbortError(err) {
   return err?.name === "AbortError";
 }
 
+function friendlyErrorMessage(raw) {
+  if (raw == null || String(raw).trim() === "") {
+    return "알 수 없는 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.";
+  }
+  const msg = String(raw);
+  const low = msg.toLowerCase();
+  if (low.includes("network") || low.includes("connection failed") || low.includes("fetch")) {
+    return "AI 서버에 연결할 수 없습니다. 네트워크와 AI 서버 기동 상태를 확인해 주세요.";
+  }
+  if (low.includes("unable to read response")) {
+    return "응답 스트림을 읽지 못했습니다. 서버 설정을 확인하거나 관리자에게 문의해 주세요.";
+  }
+  if (/request failed\s*\(\s*http\s*\d+/i.test(msg) || /\b401\b/.test(msg)) {
+    return "인증에 실패했습니다. 로그아웃 후 다시 로그인해 주세요.";
+  }
+  if (/\b5\d\d\b/.test(msg) || low.includes("internal server")) {
+    return "서버 오류가 발생했습니다. 잠시 후 다시 시도하거나 관리자에게 문의해 주세요.";
+  }
+  return msg;
+}
+
 export default function EyeDiseasePage() {
   const { id: patientId } = useParams();
   const [imageFile, setImageFile] = useState(null);
+  const [previewObjectUrl, setPreviewObjectUrl] = useState(null);
   const [step, setStep] = useState(STEPS.IDLE);
   const [dlResult, setDlResult] = useState(null);
   const [emergency, setEmergency] = useState(null);
@@ -61,6 +85,9 @@ export default function EyeDiseasePage() {
   const [inferenceMs, setInferenceMs] = useState(null);
 
   const analyzeAbortRef = useRef(null);
+  const onPreviewObjectUrlChange = useCallback((url) => {
+    setPreviewObjectUrl(url);
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -84,9 +111,21 @@ export default function EyeDiseasePage() {
     setInferenceMs(null);
   };
 
+  const resetLoading = () => {
+    setGradcamLoading(false);
+    setReportLoading(false);
+  };
+
   const reset = () => {
     analyzeAbortRef.current?.abort();
     analyzeAbortRef.current = null;
+    clearAnalysisState();
+  };
+
+  const cancelRunningAnalysis = () => {
+    analyzeAbortRef.current?.abort();
+    analyzeAbortRef.current = null;
+    resetLoading();
     clearAnalysisState();
   };
 
@@ -151,16 +190,15 @@ export default function EyeDiseasePage() {
               break;
 
             case "done":
-              setReportLoading(false);
+              resetLoading();
               if (data.inference_time_ms != null) setInferenceMs(data.inference_time_ms);
               if (data.quality_score != null) setQualityScore(data.quality_score);
               setStep(STEPS.DONE);
               break;
 
             case "error":
-              setError(data.message || "알 수 없는 오류");
-              setGradcamLoading(false);
-              setReportLoading(false);
+              setError(friendlyErrorMessage(data.message));
+              resetLoading();
               setStep(STEPS.ERROR);
               break;
 
@@ -172,22 +210,26 @@ export default function EyeDiseasePage() {
       );
     } catch (err) {
       if (isAbortError(err)) return;
-      setError(err.message);
+      setError(friendlyErrorMessage(err.message));
+      resetLoading();
       setStep(STEPS.ERROR);
     }
   };
 
-  const isRunning = [
-    STEPS.UPLOADING,
-    STEPS.IMAGE_VALIDATED,
-    STEPS.DL_RUNNING,
-    STEPS.GRADCAM,
-    STEPS.RAG,
-    STEPS.REPORT,
-  ].includes(step);
+  const isRunning =
+    [
+      STEPS.UPLOADING,
+      STEPS.IMAGE_VALIDATED,
+      STEPS.DL_RUNNING,
+      STEPS.GRADCAM,
+      STEPS.RAG,
+      STEPS.REPORT,
+    ].includes(step) ||
+    /* GradCAM 도착 전: step은 dl_done이지만 파이프라인은 진행 중 */
+    (step === STEPS.DL_DONE && gradcamLoading);
 
   return (
-    <div className="min-h-screen bg-[#0f172a] text-slate-100">
+    <div className="min-h-screen bg-[#0f172a] text-slate-100 pb-10">
       <div className="max-w-2xl mx-auto px-4 py-6 space-y-5">
 
         {showEmergency && (
@@ -204,7 +246,15 @@ export default function EyeDiseasePage() {
           </p>
         </div>
 
-        <ImageUpload onImageSelect={setImageFile} disabled={isRunning} />
+        <AiDisclaimer />
+
+        <ImageUpload
+          onImageSelect={setImageFile}
+          onPreviewObjectUrl={onPreviewObjectUrlChange}
+          disabled={isRunning}
+        />
+
+        <AnalysisStepper step={step} gradcamLoading={gradcamLoading} />
 
         {step !== STEPS.IDLE && (
           <div
@@ -226,36 +276,51 @@ export default function EyeDiseasePage() {
         )}
 
         {error && (
-          <div className="rounded-xl border border-rose-800/50 bg-rose-950/30 p-4 text-sm text-rose-300">
+          <div className="rounded-xl border border-rose-800/50 bg-rose-950/30 p-4 text-sm text-rose-200 leading-relaxed">
             {error}
           </div>
         )}
 
-        <button
-          type="button"
-          onClick={isRunning ? undefined : (step === STEPS.DONE ? reset : handleAnalyze)}
-          disabled={(!imageFile && step === STEPS.IDLE) || !patientId}
-          className={`w-full py-3 rounded-xl font-medium text-white transition-colors
-            ${isRunning
-              ? "bg-slate-600 cursor-not-allowed"
-              : step === STEPS.DONE
-                ? "bg-slate-600 hover:bg-slate-500"
-                : "bg-sky-600 hover:bg-sky-500 disabled:opacity-40 disabled:cursor-not-allowed"
-            }`}
-        >
-          {!patientId
-            ? "환자 ID가 없습니다"
-            : isRunning
-              ? "분석 중..."
-              : step === STEPS.DONE
-                ? "새 분석 시작"
-                : "AI 분석 시작"}
-        </button>
+        <div className="flex flex-col gap-2 sm:flex-row">
+          {isRunning && (
+            <button
+              type="button"
+              onClick={cancelRunningAnalysis}
+              className="w-full sm:w-auto sm:min-w-[120px] py-3 rounded-xl font-medium border border-rose-500/50 text-rose-200 bg-rose-950/30 hover:bg-rose-900/40 transition-colors"
+            >
+              분석 취소
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={isRunning ? undefined : (step === STEPS.DONE ? reset : handleAnalyze)}
+            disabled={(!imageFile && step === STEPS.IDLE) || !patientId}
+            className={`flex-1 py-3 rounded-xl font-medium text-white transition-colors
+              ${isRunning
+                ? "bg-slate-600 cursor-not-allowed"
+                : step === STEPS.DONE
+                  ? "bg-slate-600 hover:bg-slate-500"
+                  : "bg-sky-600 hover:bg-sky-500 disabled:opacity-40 disabled:cursor-not-allowed"
+              }`}
+          >
+            {!patientId
+              ? "환자 ID가 없습니다"
+              : isRunning
+                ? "분석 중..."
+                : step === STEPS.DONE
+                  ? "새 분석 시작"
+                  : "AI 분석 시작"}
+          </button>
+        </div>
 
         {dlResult && <DiagnosisResult dlResult={dlResult} />}
 
         {(gradcamLoading || gradcamB64) && (
-          <GradCAMViewer gradcamBase64={gradcamB64} loading={gradcamLoading} />
+          <GradCAMViewer
+            gradcamBase64={gradcamB64}
+            originalObjectUrl={previewObjectUrl}
+            loading={gradcamLoading}
+          />
         )}
 
         {(reportLoading || report) && (
@@ -271,6 +336,8 @@ export default function EyeDiseasePage() {
             이미지 품질: {(qualityScore * 100).toFixed(0)}점
           </p>
         )}
+
+        <AiDisclaimer className="opacity-90" />
       </div>
     </div>
   );

@@ -74,7 +74,7 @@ def _seed_nodes(graph: nx.MultiDiGraph, disease_name: str, stage: int) -> list[s
         lowered = nid.lower()
         hit = False
         for n in needles:
-            if len(n) >= 3 and (n in lowered or lowered in n):
+            if len(n) >= 3 and n in lowered:
                 hit = True
                 break
         if not hit and name_l:
@@ -115,7 +115,7 @@ def _multisource_bfs_reachable(ug: nx.Graph, seeds: list[str], max_depth: int) -
 
 
 def _ordered_chunk_ids_from_subgraph(G: nx.MultiDiGraph, reached: dict[str, int]) -> list[int]:
-    """방문 노드 부근 관계선의 source_chunk_id를 거리 순으로 정렬하여 중복 제거."""
+    """방문 노드 근처 엣지 + 노드 source_chunk_ids 를 거리 순 정렬 후 중복 제거."""
     pairs: list[tuple[int, int]] = []
 
     for u, v, _, data in G.edges(keys=True, data=True):
@@ -139,8 +139,26 @@ def _ordered_chunk_ids_from_subgraph(G: nx.MultiDiGraph, reached: dict[str, int]
             cand.append(int(rv))
         if not cand:
             continue
-        d = min(cand)
-        pairs.append((d, i))
+        dmin = min(cand)
+        pairs.append((dmin, i))
+
+    for node_id, dist in reached.items():
+        if node_id not in G:
+            continue
+        attrs = G.nodes[node_id]
+        scids = attrs.get("source_chunk_ids")
+        if scids is None:
+            chunk_iter: tuple = ()
+        elif isinstance(scids, (list, tuple, set)):
+            chunk_iter = tuple(scids)
+        else:
+            chunk_iter = (scids,)
+        for raw in chunk_iter:
+            try:
+                i = int(raw)
+            except (TypeError, ValueError):
+                continue
+            pairs.append((int(dist), i))
 
     pairs.sort(key=lambda x: (x[0], x[1]))
     out: list[int] = []
@@ -152,13 +170,20 @@ def _ordered_chunk_ids_from_subgraph(G: nx.MultiDiGraph, reached: dict[str, int]
     return out
 
 
+def reset_graph_cache() -> None:
+    """graph.pkl 재생성 후 런타임에서 다시 로드하도록 캐시 초기화."""
+    global _GRAPH_CACHE, _GRAPH_TRIED
+    _GRAPH_CACHE = None
+    _GRAPH_TRIED = False
+
+
 class GraphBuilder:
     """모듈 메타."""
 
     _module_tag = "eyes"
 
     def load(self) -> None:
-        return
+        reset_graph_cache()
 
     @property
     def module_tag(self) -> str:

@@ -3,7 +3,7 @@
 # ================================================================
 # AI/requirements.txt (공통) 대비 차이점:
 #   제거  — ultralytics, torchvision, opencv, grad-cam (Vision 전용)
-#           langchain, langgraph (NJ 운영 코드에서 미사용)
+#           langchain, langgraph, langchain-google-genai (NJ 운영 코드에서 미사용)
 #           psutil (미사용)
 #   추가  — imbalanced-learn  (SMOTE, 공통에 누락)
 #           xgboost           (분석 스크립트)
@@ -30,6 +30,7 @@ imbalanced-learn>=0.12.0   # SMOTE — 공통 requirements.txt에 누락된 패�
 
 # ── RAG — 임베딩 (개발 모드: BGE-M3) ──────────────────────────────
 FlagEmbedding>=1.2.10
+sentence-transformers>=2.6.0   # FlagEmbedding PyTorch 2.6 호환 오류 시 자동 폴백
 
 # ── RAG — 벡터 DB ───────────────────────────────────────────────
 psycopg2-binary==2.9.9
@@ -38,6 +39,11 @@ pgvector==0.2.5
 # ── Google Vertex AI (실전 모드 전용) ─────────────────────────────
 google-cloud-aiplatform==1.49.0
 google-auth==2.29.0
+
+# ── LangChain LCEL (RAG 오케스트레이터) ──────────────────────────
+langchain-core>=0.1.0
+langchain-google-vertexai>=0.1.0   # Vertex AI ChatVertexAI
+langchain-community>=0.0.34        # ChatOllama 개발 모드 (+ 청킹 스크립트 공용)
 
 # ── 유틸리티 ────────────────────────────────────────────────────
 python-dotenv==1.0.1

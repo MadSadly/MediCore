@@ -36,6 +36,16 @@ def _region() -> str:
 
 def _init_vertex():
     global _initialized
+    gcp_key_raw = os.getenv("GCP_KEY_PATH") or ""
+    adc = os.getenv("GOOGLE_APPLICATION_CREDENTIALS") or ""
+    if gcp_key_raw.strip() and not adc.strip():
+        expanded = os.path.expanduser(os.path.expandvars(gcp_key_raw.strip()))
+        os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = expanded
+        logger.info(
+            "GCP_KEY_PATH → GOOGLE_APPLICATION_CREDENTIALS 설정됨 | path=%s",
+            expanded,
+        )
+
     if _initialized:
         return
     project = _project_id()
@@ -45,7 +55,15 @@ def _init_vertex():
             "GOOGLE_CLOUD_PROJECT 또는 GCP_PROJECT_ID 중 하나를 .env 등에 설정하세요."
         )
     region = _region()
-    vertexai.init(project=project, location=region)
+    try:
+        vertexai.init(project=project, location=region)
+    except Exception:
+        logger.exception(
+            "Vertex AI vertexai.init 실패 | project=%s | region=%s",
+            project,
+            region,
+        )
+        raise
     logger.info(
         "Vertex AI 초기화 완료 | 프로젝트: %s | 리전: %s",
         project,
