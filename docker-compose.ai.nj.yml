@@ -3,8 +3,8 @@ services:
   ai-server:
     build:
       context: ./AI
-      dockerfile: WJ/Dockerfile
-    container_name: medicore-ai-wj
+      dockerfile: NJ/Dockerfile
+    container_name: medicore-ai-nj
     restart: unless-stopped
     environment:
       DB_URL: postgresql://medicore:${DB_PASSWORD}@192.168.0.20:5432/medicoredb
