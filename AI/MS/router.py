@@ -8,7 +8,7 @@ from MS.pipeline import run_pipeline
 
 logger = logging.getLogger("medicore.skin.router")
 
-router = APIRouter()
+router = APIRouter(prefix="/ai")
 
 
 def _state_to_response(state: dict, image_name: str) -> DiagnoseResponse:
