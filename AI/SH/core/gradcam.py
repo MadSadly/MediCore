@@ -126,35 +126,63 @@ class GradCAMEngine:
             from pytorch_grad_cam.utils.image import show_cam_on_image
             from pytorch_grad_cam.utils.model_targets import ClassifierOutputTarget
 
+            # 원본 크기 저장
             img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
-            img_resized = cv2.resize(img_rgb, (IMG_SIZE, IMG_SIZE))
-            img_float = img_resized.astype(np.float32) / 255.0
+            h_orig, w_orig = img_rgb.shape[:2]
 
-            input_tensor = torch.from_numpy(
-                ((img_float - IMG_MEAN) / IMG_STD).transpose(2, 0, 1)
-            ).unsqueeze(0).float()
+            # zero-padding (model.py와 동일)
+            scale = IMG_SIZE / max(h_orig, w_orig)
+            nh, nw = int(h_orig * scale), int(w_orig * scale)
+            img_padded = cv2.resize(img_rgb, (nw, nh), interpolation=cv2.INTER_LINEAR)
+            ph = IMG_SIZE - nh
+            pw = IMG_SIZE - nw
+            top_pad = ph // 2
+            bottom_pad = ph - top_pad
+            left_pad = pw // 2
+            right_pad = pw - left_pad
+            img_padded = cv2.copyMakeBorder(
+                img_padded,
+                top_pad,
+                bottom_pad,
+                left_pad,
+                right_pad,
+                cv2.BORDER_CONSTANT,
+                value=0,
+            )
+            img_float = img_padded.astype(np.float32) / 255.0
 
+            # input tensor
             model = self._cam.model
             device = next(model.parameters()).device
-            input_tensor = input_tensor.to(device)
+            input_tensor = torch.from_numpy(
+                ((img_float - IMG_MEAN) / IMG_STD).transpose(2, 0, 1)
+            ).unsqueeze(0).float().to(device)
 
+            # GradCAM 실행
             targets = [ClassifierOutputTarget(int(disease_id))]
             grayscale_cam = self._cam(
                 input_tensor=input_tensor,
                 targets=targets,
-            )[0]
+            )[0]  # 224x224
 
+            # 패딩 crop → 원본 크기로 resize
+            cam_content = grayscale_cam[
+                top_pad : IMG_SIZE - bottom_pad if bottom_pad > 0 else IMG_SIZE,
+                left_pad : IMG_SIZE - right_pad if right_pad > 0 else IMG_SIZE,
+            ]
+            cam_resized = cv2.resize(cam_content, (w_orig, h_orig))
+
+            # 원본 이미지에 오버레이
+            img_orig_float = img_rgb.astype(np.float32) / 255.0
             visualization = show_cam_on_image(
-                img_float,
-                grayscale_cam,
+                img_orig_float,
+                cam_resized,
                 use_rgb=True,
                 colormap=cv2.COLORMAP_JET,
             )
 
-            _, buf = cv2.imencode(
-                ".png",
-                cv2.cvtColor(visualization, cv2.COLOR_RGB2BGR),
-            )
+            # PNG → Base64
+            _, buf = cv2.imencode(".png", cv2.cvtColor(visualization, cv2.COLOR_RGB2BGR))
             return base64.b64encode(buf.tobytes()).decode("utf-8")
 
         except Exception as e:

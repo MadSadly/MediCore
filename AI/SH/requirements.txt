@@ -24,8 +24,7 @@ grad-cam>=1.5.0
 asyncpg>=0.29.0
 psycopg2-binary>=2.9.9
 
-# RAG (BGE-M3 + BM25)
-FlagEmbedding>=1.2.10
+# RAG (Vertex gemini-embedding-001 768 + BM25; graph/eval 등)
 networkx>=3.2
 google-generativeai>=0.8.0
 pymupdf>=1.24.0
@@ -36,3 +35,4 @@ vertexai>=1.43.0
 
 # Utils
 pydantic>=2.6.0
+json-repair>=0.29.0

@@ -1,15 +1,21 @@
 /**
- * 고정 면책 문구 (진단 결과 상단/하단 배너)
+ * 고정 면책 조항
  */
 
-export default function AiDisclaimer({ className = "" }) {
+export default function AiDisclaimer() {
   return (
     <div
-      className={`rounded-lg border border-amber-500/25 bg-amber-950/25 px-3 py-2 text-[11px] leading-relaxed text-amber-200/85 ${className}`}
+      className="flex gap-2 rounded-lg border border-slate-700/50 bg-slate-800/30 px-3 py-2.5 text-xs text-slate-500 leading-relaxed"
       role="note"
     >
-      <strong className="text-amber-400/95">면책:</strong>{" "}
-      본 결과는 AI 보조 지표일 뿐이며, 최종 진단·처치·법적 책임은 반드시 전문의가 수행합니다.
+      <span className="select-none shrink-0" aria-hidden>
+        ⚠️
+      </span>
+      <p className="m-0">
+        본 AI 분석 결과는 임상 의사 결정을 보조하는 도구입니다.
+        <br />
+        최종 진단 및 치료 결정은 반드시 담당 의사의 판단에 따라야 합니다.
+      </p>
     </div>
   );
 }

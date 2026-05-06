@@ -4,7 +4,7 @@
 
 import { useState, useRef, useEffect } from "react";
 
-export default function ImageUpload({ onImageSelect, onPreviewObjectUrl, disabled }) {
+export default function ImageUpload({ onImageSelect, disabled }) {
   const [preview, setPreview] = useState(null);
   const [dragging, setDragging] = useState(false);
   const [error, setError] = useState(null);
@@ -15,10 +15,6 @@ export default function ImageUpload({ onImageSelect, onPreviewObjectUrl, disable
       if (preview) URL.revokeObjectURL(preview);
     };
   }, [preview]);
-
-  useEffect(() => {
-    onPreviewObjectUrl?.(preview ?? null);
-  }, [preview, onPreviewObjectUrl]);
 
   const handleFile = (file) => {
     setError(null);
@@ -32,11 +28,13 @@ export default function ImageUpload({ onImageSelect, onPreviewObjectUrl, disable
       setError("파일이 20MB를 넘습니다. 안저가 선명하게 보이도록 압축하거나 다른 사진을 올려 주세요.");
       return;
     }
+
+    const url = URL.createObjectURL(file);
     setPreview((prev) => {
       if (prev) URL.revokeObjectURL(prev);
-      return URL.createObjectURL(file);
+      return url;
     });
-    onImageSelect(file);
+    onImageSelect(file, url);
   };
 
   const handleDrop = (e) => {
@@ -51,7 +49,7 @@ export default function ImageUpload({ onImageSelect, onPreviewObjectUrl, disable
       if (prev) URL.revokeObjectURL(prev);
       return null;
     });
-    onImageSelect(null);
+    onImageSelect(null, null);
   };
 
   return (
