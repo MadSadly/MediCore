@@ -1,33 +1,37 @@
 """
-RAG 파이프라인 오케스트레이터
+RAG 파이프라인 오케스트레이터 (Vertex AI Gemini)
 
 LLM 백엔드 우선순위:
-  1. GCP_PROJECT_ID 설정  → Vertex AI Gemini  (실전)
-  2. OLLAMA_BASE_URL 설정 → Ollama 로컬 LLM  (개발)
-  3. 미설정              → 규칙 기반 템플릿  (폴백)
+  1. GCP_PROJECT_ID 설정  → Vertex AI Gemini
+  2. OLLAMA_BASE_URL 설정 → Ollama 로컬 LLM
+  3. 미설정              → 규칙 기반 템플릿 (폴백)
 
-Ollama 사용 시 .env 에 아래 두 줄 추가:
-  OLLAMA_BASE_URL=http://<host>:11434
-  OLLAMA_MODEL=llama3.1
+.env 필수 설정:
+  GCP_PROJECT_ID=your-project-id
+  GCP_LOCATION=us-central1
+  GEMINI_MODEL=gemini-2.5-flash
+  GCP_KEY_PATH=./secrets/gcp-key.json
 """
 
 from __future__ import annotations
 
 import os
 import logging
+from pathlib import Path
 
-import requests
-
-from .retriever import search, multi_search, USE_GEMINI
+from .retriever import search, multi_search
 from .report_template import (
     build_section1,
-    build_llm_prompt,
-    parse_llm_sections,
+    build_lc_prompt,
     build_fallback_sections,
     assemble_report,
+    get_report_parser,
 )
 
 logger = logging.getLogger("medicore.kidney.rag")
+
+_GCP_PROJECT   = os.getenv("GCP_PROJECT_ID", "")
+USE_VERTEX_LLM = bool(_GCP_PROJECT and _GCP_PROJECT != "placeholder")
 
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "").rstrip("/")
 OLLAMA_MODEL    = os.getenv("OLLAMA_MODEL", "llama3.1")
@@ -61,7 +65,6 @@ _STAGE_SUBQUERIES: dict[str, list[str]] = {
     ],
 }
 
-# ── 한국어 강제 시스템 프롬프트 ───────────────────────────────────
 _KOREAN_SYSTEM = (
     "당신은 한국어로만 응답하는 신장내과 전문의 보조 AI입니다. "
     "반드시 한국어로만 작성하십시오. "
@@ -69,56 +72,61 @@ _KOREAN_SYSTEM = (
     "의학 전문 용어도 반드시 한국어로 표기하십시오."
 )
 
-_gemini  = None
-_gen_cfg = None
+_gemini_llm = None
+_ollama_llm = None
 
 
-def _get_gemini():
-    """Vertex AI Gemini 모델 싱글톤 (실전 모드 전용)."""
-    global _gemini, _gen_cfg
-    if _gemini is not None:
-        return _gemini
+def _get_gemini_llm():
+    """Vertex AI Gemini LangChain 모델 싱글톤."""
+    global _gemini_llm
+    if _gemini_llm is not None:
+        return _gemini_llm
 
     import vertexai
-    from vertexai.generative_models import GenerativeModel, GenerationConfig
+    from langchain_google_vertexai import ChatVertexAI
 
     project  = os.getenv("GCP_PROJECT_ID")
-    location = os.getenv("GCP_LOCATION", "asia-northeast3")
+    location = os.getenv("GCP_LOCATION", "us-central1")
     key_path = os.getenv("GCP_KEY_PATH")
 
     if key_path:
-        os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = key_path
+        key_abs = Path(key_path)
+        if not key_abs.is_absolute():
+            key_abs = (Path(__file__).resolve().parents[3] / key_path).resolve()
+        os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = str(key_abs)
+        logger.info(f"GCP 인증 키: {key_abs}")
 
     vertexai.init(project=project, location=location)
 
-    model_name = os.getenv("GEMINI_MODEL", "gemini-2.0-flash-001")
-    _gemini    = GenerativeModel(model_name, system_instruction=_KOREAN_SYSTEM)
-    _gen_cfg   = GenerationConfig(temperature=0.2, max_output_tokens=2048)
-
-    logger.info(f"Gemini LLM 초기화 완료: {model_name}")
-    return _gemini
-
-
-def _call_gemini(prompt: str) -> str:
-    model = _get_gemini()
-    resp  = model.generate_content(prompt, generation_config=_gen_cfg)
-    return resp.text
-
-
-def _call_ollama(prompt: str) -> str:
-    resp = requests.post(
-        f"{OLLAMA_BASE_URL}/api/generate",
-        json={
-            "model":   OLLAMA_MODEL,
-            "system":  _KOREAN_SYSTEM,
-            "prompt":  prompt,
-            "stream":  False,
-            "options": {"temperature": 0.2},
-        },
-        timeout=600,
+    model_name  = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+    _gemini_llm = ChatVertexAI(
+        model=model_name,
+        project=project,
+        location=location,
+        temperature=0.2,
+        max_output_tokens=8192,
     )
-    resp.raise_for_status()
-    return resp.json()["response"].strip()
+
+    logger.info(f"Vertex AI Gemini 초기화 완료: {model_name} @ {location}")
+    return _gemini_llm
+
+
+def _get_ollama_llm():
+    """Ollama LangChain 모델 싱글톤."""
+    global _ollama_llm
+    if _ollama_llm is not None:
+        return _ollama_llm
+
+    from langchain_community.chat_models import ChatOllama
+
+    _ollama_llm = ChatOllama(
+        base_url=OLLAMA_BASE_URL,
+        model=OLLAMA_MODEL,
+        temperature=0.2,
+    )
+
+    logger.info(f"Ollama LLM 초기화 완료: {OLLAMA_MODEL}")
+    return _ollama_llm
 
 
 def _generate_report(
@@ -127,25 +135,38 @@ def _generate_report(
     input_data: dict,
     contexts: list,
     query: str,
-    llm_caller,
+    llm,
 ) -> str:
-    """LLM을 사용하여 섹션 2~4를 채운 뒤 소견서를 조립."""
+    """LCEL 체인(llm | PydanticOutputParser)으로 섹션 2~5 생성 후 소견서 조립."""
+    from langchain_core.messages import HumanMessage, SystemMessage
+
     section1 = build_section1(prediction, confidence, input_data)
-    prompt   = build_llm_prompt(prediction, input_data, contexts, query)
+    parser   = get_report_parser()
+
+    prompt_text = build_lc_prompt(
+        prediction, input_data, contexts, query,
+        format_instructions=parser.get_format_instructions(),
+    )
+
+    messages = [
+        SystemMessage(content=_KOREAN_SYSTEM),
+        HumanMessage(content=prompt_text),
+    ]
+
+    chain = llm | parser
 
     try:
-        raw      = llm_caller(prompt)
-        sections = parse_llm_sections(raw)
+        result   = chain.invoke(messages)
+        sections = result.model_dump()
 
-        # 파싱 실패한 섹션은 폴백으로 보완
         fallback = build_fallback_sections(prediction, contexts, confidence, input_data)
         for key in ("sec2", "sec3", "sec41", "sec42", "sec43", "sec5"):
             if not sections.get(key):
                 sections[key] = fallback[key]
 
-        logger.info(f"LLM 소견서 생성 완료 — 파싱 섹션: {list(sections.keys())}")
+        logger.info(f"Vertex AI 소견서 생성 완료 — 섹션: {[k for k, v in sections.items() if v]}")
     except Exception as e:
-        logger.warning(f"LLM 생성 실패: {e} — 규칙 기반 폴백 사용")
+        logger.warning(f"LangChain 생성 실패: {e} — 규칙 기반 폴백 사용")
         sections = build_fallback_sections(prediction, contexts, confidence, input_data)
 
     return assemble_report(section1, sections)
@@ -158,15 +179,14 @@ def generate(
     input_data: dict,
     contexts: list,
 ) -> str:
-    if USE_GEMINI:
+    if USE_VERTEX_LLM:
         return _generate_report(
-            prediction, confidence, input_data, contexts, query, _call_gemini
+            prediction, confidence, input_data, contexts, query, _get_gemini_llm()
         )
     if USE_OLLAMA:
         return _generate_report(
-            prediction, confidence, input_data, contexts, query, _call_ollama
+            prediction, confidence, input_data, contexts, query, _get_ollama_llm()
         )
-    # 폴백: LLM 없이 규칙 기반
     section1 = build_section1(prediction, confidence, input_data)
     sections = build_fallback_sections(prediction, contexts, confidence, input_data)
     return assemble_report(section1, sections)

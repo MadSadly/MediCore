@@ -18,7 +18,7 @@ import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from SH.router import router, lifespan
+from .router import router, lifespan
 
 app = FastAPI(
     title="안과 CDSS — SH 로컬 개발 서버",

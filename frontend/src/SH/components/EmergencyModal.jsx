@@ -35,7 +35,11 @@ export default function EmergencyModal({ emergency, onClose }) {
             type="button"
             onClick={onClose}
             className={`w-full py-2.5 rounded-xl font-medium text-white
-              ${emergency.emergency_level === 3 ? "bg-red-500 hover:bg-red-600" : "bg-orange-500 hover:bg-orange-600"}
+              ${emergency.emergency_level === 3
+                ? "bg-red-500 hover:bg-red-600"
+                : emergency.emergency_level === 1
+                  ? "bg-yellow-500 hover:bg-yellow-600"
+                  : "bg-orange-500 hover:bg-orange-600"}
               transition-colors`}
           >
             확인 — 즉시 조치하겠습니다
