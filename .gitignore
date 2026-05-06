@@ -45,3 +45,6 @@ MS_run_all.bat
 run_SH.bat
 
 AI_SH_Claude인수인계.md
+
+# 개인 Docker Compose 파일
+docker-compose.ai.ms.yml

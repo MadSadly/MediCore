@@ -9,10 +9,14 @@ Gemini Flash로 15개 질환 × 4주제 = 60개 청크 자동 생성 후
 gemini-embedding-001 RETRIEVAL_DOCUMENT로 벡터화 → medical_knowledge 삽입
 """
 
+import io
 import os
+import sys
 import time
 from pathlib import Path
 from dotenv import load_dotenv
+
+sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
 
 load_dotenv(Path(__file__).resolve().parents[2] / ".env")
 
