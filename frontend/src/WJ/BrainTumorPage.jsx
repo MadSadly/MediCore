@@ -3,8 +3,8 @@ import { useParams } from 'react-router-dom'
 import { Niivue } from '@niivue/niivue'
 import axios from 'axios'
 
-const AI_URL = import.meta.env.VITE_AI_URL || 'http://localhost:8000'
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:8080'
+const AI_URL = import.meta.env.VITE_AI_URL || ''
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || ''
 
 const C = {
   bg:     '#080808',
