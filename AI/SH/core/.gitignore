@@ -1,0 +1,6 @@
+# 테스트용 이미지 및 스크립트 제외
+test_fundus.png
+test_gradcam.py
+
+# 테스트 결과물 폴더 제외
+gradcam_test_output/

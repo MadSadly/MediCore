@@ -16,6 +16,8 @@ AI/SH/core/quality_check.py
  10. 추론 후 OOD 차단 (별도 함수)
 """
 
+import os
+
 import cv2
 import numpy as np
 from typing import Tuple, Optional
@@ -24,7 +26,9 @@ from ..schemas.response import ImageQualityResult, ErrorCode
 
 
 # ── 임계값 설정 ───────────────────────────────────────────────
-LAPLACIAN_THRESHOLD   = 100.0   # 블러 감지 임계값
+# Laplacian 분산: 마스크 안저 영역 기준. 낮을수록 흐림.
+# 100은 실촬영·압축 이미지에서 자주 걸려 기본 70 (엄격: .env 에 SH_LAPLACIAN_THRESHOLD=100)
+LAPLACIAN_THRESHOLD = float(os.getenv("SH_LAPLACIAN_THRESHOLD", "70.0"))
 MIN_RESOLUTION        = 512     # 최소 단변 해상도
 MAX_ASPECT_RATIO      = 1.5     # 최대 종횡비 (안저는 거의 1:1)
 MAX_FILE_SIZE_MB      = 20      # 최대 파일 크기

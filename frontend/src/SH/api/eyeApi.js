@@ -1,31 +1,48 @@
 /**
- * 안과 AI 분석 — POST /sh/analyze (SSE)
- * 프록시: /ai → AI 서버 (vite.config.js)
+ * Eye AI analysis SSE client.
+ * Proxy: /ai -> AI server (vite.config.js)
  */
 
 const ANALYZE_URL = "/ai/sh/analyze";
+
+function parseApiErrorMessage(rawText, status) {
+  if (!rawText) return `Request failed (HTTP ${status})`;
+
+  try {
+    const parsed = JSON.parse(rawText);
+    if (typeof parsed === "string") return parsed;
+    if (parsed?.message) return parsed.message;
+    if (parsed?.detail) return parsed.detail;
+    return rawText;
+  } catch {
+    return rawText;
+  }
+}
 
 function parseSseBlocks(buffer) {
   const events = [];
   const parts = buffer.split(/\n\n/);
   const rest = parts.pop() ?? "";
+
   for (const block of parts) {
     if (!block.trim()) continue;
     let eventType = "message";
     let dataStr = null;
+
     for (const line of block.split("\n")) {
       if (line.startsWith("event:")) eventType = line.slice(6).trim();
       else if (line.startsWith("data:")) dataStr = line.slice(5).trim();
     }
+
     if (dataStr) {
       try {
         events.push({ event: eventType, data: JSON.parse(dataStr) });
       } catch (e) {
-        // 불완전·손상 JSON: 다음 청크와 합쳐진 뒤 재시도되거나, 해당 이벤트만 건너뜀
         console.warn("eyeApi: SSE JSON parse skipped", e?.message, dataStr.slice(0, 120));
       }
     }
   }
+
   return { events, rest };
 }
 
@@ -37,6 +54,7 @@ function parseSseBlocks(buffer) {
  */
 export async function analyzeEye(file, meta, onEvent, abortSignal) {
   const token = localStorage.getItem("token");
+
   const form = new FormData();
   form.append("file", file);
   form.append("patient_id", meta.patientId);
@@ -54,15 +72,21 @@ export async function analyzeEye(file, meta, onEvent, abortSignal) {
   };
   if (abortSignal) fetchOpts.signal = abortSignal;
 
-  const res = await fetch(ANALYZE_URL, fetchOpts);
+  let res;
+  try {
+    res = await fetch(ANALYZE_URL, fetchOpts);
+  } catch (err) {
+    if (err?.name === "AbortError") throw err;
+    throw new Error("Network connection failed. Check AI server status.");
+  }
 
   if (!res.ok) {
     const text = await res.text();
-    throw new Error(text || `HTTP ${res.status}`);
+    throw new Error(parseApiErrorMessage(text, res.status));
   }
 
   const reader = res.body?.getReader();
-  if (!reader) throw new Error("스트림을 읽을 수 없습니다.");
+  if (!reader) throw new Error("Unable to read response stream.");
 
   const decoder = new TextDecoder();
   let carry = "";

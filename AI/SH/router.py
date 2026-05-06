@@ -1,6 +1,6 @@
 """
 AI/SH/router.py
-안과 CDSS — FastAPI 라우터 · POST /sh/analyze (SSE) · POST /sh/analyze/sync (Spring JSON)
+안과 CDSS — FastAPI 라우터 · POST /ai/sh/analyze (SSE) · POST /ai/sh/analyze/sync (Spring JSON)
 OPH-03: 이미지 업로드
 OPH-05: 이미지 유효성 검증
 OPH-06: AI 통합 분석 버튼
@@ -40,7 +40,7 @@ from .llm.report_generator import generate_report_stream
 # ── 보안 ─────────────────────────────────────────────────────
 security = HTTPBearer()
 
-router = APIRouter(prefix="/sh", tags=["안과 진단"])
+router = APIRouter(prefix="/ai/sh", tags=["안과 진단"])
 
 
 # ── Lifespan (서버 시작 시 모델 워밍업) ──────────────────────
@@ -52,11 +52,9 @@ async def lifespan(app):
         print("✅ EyeModel 워밍업 완료")
     except Exception as e:
         print(f"⚠️ EyeModel 워밍업 실패: {e}")
-    try:
-        hybrid_retriever.load()
-        print("✅ HybridRetriever (BGE-M3) 워밍업 완료")
-    except Exception as e:
-        print(f"⚠️ HybridRetriever 워밍업 실패: {e}")
+    # BGE-M3(HF) 기동 시 로드하면 Hugging Face 다운로드/로딩으로 lifespan이 수십 분~멈춤처럼 보일 수 있음.
+    # HybridRetriever는 search() 첫 호출 시 _ensure_model()으로 지연 로드됨.
+    print("ℹ️ HybridRetriever(BGE-M3)는 첫 RAG 검색 시 로드됩니다.")
     try:
         graph_builder.load()
         print("✅ GraphBuilder 캐시 초기화 완료")
@@ -68,8 +66,12 @@ async def lifespan(app):
 # ── 헬스체크 ──────────────────────────────────────────────────
 @router.get("/health")
 async def health():
-    return {"status": "ok", "module": "eyes", "model_loaded": eye_model._loaded}
-
+    return {
+        "status":        "ok",
+        "module":        "eyes",
+        "model_loaded":  eye_model._loaded,
+        "gradcam_loaded": gradcam_engine._loaded,   
+    }
 
 # ── 메인 분석 엔드포인트 (SSE 스트리밍) ──────────────────────
 @router.post("/analyze")
@@ -120,7 +122,7 @@ async def analyze_sync(
 ):
     """
     Spring Boot `EyeDiagnosisService` 호환: 동기 단일 JSON.
-    SSE `/sh/analyze` 와 동일 파이프라인(품질 → DL → RAG → 소견서).
+    SSE `/ai/sh/analyze` 와 동일 파이프라인(품질 → DL → RAG → 소견서).
     """
     request = AnalysisRequest(
         patient_id=patient_id,
