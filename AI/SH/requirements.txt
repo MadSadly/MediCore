@@ -17,6 +17,9 @@ opencv-python-headless>=4.9.0
 numpy>=1.26.0
 Pillow>=10.2.0
 
+# GradCAM++ (OPH-16, PyTorch path; package imports as pytorch_grad_cam)
+grad-cam>=1.5.0
+
 # DB (PostgreSQL; hybrid RAG)
 asyncpg>=0.29.0
 psycopg2-binary>=2.9.9
