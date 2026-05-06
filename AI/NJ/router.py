@@ -9,8 +9,8 @@ from .schemas import (
     KidneyDiagnoseResponse,
     HealthResponse,
 )
-from .model import KidneyPredictor
-from .rag_engine import get_rag_engine
+from .core import KidneyPredictor
+from .rag import query_and_generate
 
 logger = logging.getLogger("medicore.kidney")
 router = APIRouter()
@@ -179,19 +179,31 @@ async def kidney_diagnose(req: KidneyDiagnoseRequest):
         logger.warning(f"알림 발생 {len(alerts)}건 — {levels}")
 
     # 3. RAG + 소견서
-    rag        = get_rag_engine()
     query      = req.query or f"{prediction} 단계의 치료 방향은?"
-    rag_result = rag.query_and_generate(query, prediction)
+    rag_result = query_and_generate(
+        query,
+        prediction,
+        confidence = dl_result["confidence"],
+        input_data = req.dict(exclude={"query"}),
+    )
+
+    # 4. 피처 기여도
+    try:
+        feature_importance = predictor.explain(clinical_data)
+    except Exception as e:
+        logger.warning(f"피처 기여도 계산 실패: {e}")
+        feature_importance = None
 
     return KidneyDiagnoseResponse(
-        module            = "kidney",
-        prediction        = prediction,
-        confidence        = dl_result["confidence"],
-        description       = dl_result["description"],
-        severity          = dl_result["severity"],
-        dialysis_required = dl_result["dialysis_required"],
-        probabilities     = dl_result["probabilities"],
-        alerts            = alerts,
-        rag_answer        = rag_result["answer"],
-        rag_sources       = rag_result["sources"],
+        module             = "kidney",
+        prediction         = prediction,
+        confidence         = dl_result["confidence"],
+        description        = dl_result["description"],
+        severity           = dl_result["severity"],
+        dialysis_required  = dl_result["dialysis_required"],
+        probabilities      = dl_result["probabilities"],
+        alerts             = alerts,
+        rag_answer         = rag_result["answer"],
+        rag_sources        = rag_result["sources"],
+        feature_importance = feature_importance,
     )

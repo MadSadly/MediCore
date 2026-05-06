@@ -11,7 +11,7 @@ public class EyeDiagnosisRequest {
 
     private String patientId;
     private Integer patientAge;
-    private Boolean hasDiabetes;
-    private Boolean hasHypertension;
+    private Boolean hasDiabetes = false;
+    private Boolean hasHypertension = false;
     private String clinicalNote;
 }

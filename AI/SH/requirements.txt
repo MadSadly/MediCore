@@ -1,5 +1,5 @@
 # AI/SH/requirements.txt
-# 안과 CDSS — 의존성 목록
+# Ophthalmology CDSS (SH module) Python dependencies.
 
 # FastAPI
 fastapi>=0.110.0
@@ -7,30 +7,29 @@ uvicorn[standard]>=0.27.0
 python-multipart>=0.0.9
 python-dotenv>=1.0.0
 
-# AI 추론
-onnxruntime-gpu>=1.17.0  # GPU 환경
-# onnxruntime>=1.17.0    # CPU 환경 (GPU 없을 시 교체)
+# ONNX (use onnxruntime>=1.17.0 on CPU-only PCs instead of onnxruntime-gpu)
+onnxruntime-gpu>=1.17.0
 torch>=2.2.0
 timm>=0.9.0
 
-# 이미지 처리
+# Imaging
 opencv-python-headless>=4.9.0
 numpy>=1.26.0
 Pillow>=10.2.0
 
-# DB (pgvector + Hybrid 검색 동기 연결)
+# DB (PostgreSQL; hybrid RAG)
 asyncpg>=0.29.0
 psycopg2-binary>=2.9.9
 
-# RAG (Hybrid: BGE-M3 + BM25)
+# RAG (BGE-M3 + BM25)
 FlagEmbedding>=1.2.10
 networkx>=3.2
 google-generativeai>=0.8.0
-pymupdf>=1.24.0  # rag/chunk_and_embed.py PDF 텍스트 추출 (import fitz)
+pymupdf>=1.24.0
 
-# Google Cloud (소견서 생성)
+# Google Cloud (report generation)
 google-cloud-aiplatform>=1.43.0
 vertexai>=1.43.0
 
-# 유틸
+# Utils
 pydantic>=2.6.0

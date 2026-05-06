@@ -11,9 +11,10 @@ const DISEASE_COLORS = {
 };
 
 export default function DiagnosisResult({ dlResult }) {
-  if (!dlResult) return null;
+  if (!dlResult || !dlResult.primary_disease) return null;
 
   const { primary_disease, all_scores, stage } = dlResult;
+  const safeScores = Array.isArray(all_scores) ? all_scores : [];
 
   return (
     <div className="rounded-xl border border-slate-700 bg-slate-800/50 p-5 space-y-4">
@@ -41,7 +42,7 @@ export default function DiagnosisResult({ dlResult }) {
 
       <div className="space-y-2">
         <p className="text-xs text-slate-500 uppercase tracking-wide">전체 질환 분석</p>
-        {[...all_scores]
+        {[...safeScores]
           .sort((a, b) => b.confidence - a.confidence)
           .map((score) => (
             <div key={score.disease_id}>

@@ -40,23 +40,24 @@ class KidneyDiagnoseRequest(BaseModel):
 
 
 class Alert(BaseModel):
-    level:   str  # critical | warning | caution
-    code:    str  # 기계 판독용 코드
-    message: str  # 한국어 메시지
-    marker:  str  # 트리거된 지표
+    level:   str
+    code:    str
+    message: str
+    marker:  str
 
 
 class KidneyDiagnoseResponse(BaseModel):
-    module:            str
-    prediction:        str
-    confidence:        float
-    description:       str
-    severity:          str
-    dialysis_required: bool
-    probabilities:     dict
-    alerts:            list[Alert]
-    rag_answer:        str
-    rag_sources:       list[str]
+    module:             str
+    prediction:         str
+    confidence:         float
+    description:        str
+    severity:           str
+    dialysis_required:  bool
+    probabilities:      dict
+    alerts:             list[Alert]
+    rag_answer:         str
+    rag_sources:        list[str]
+    feature_importance: Optional[dict] = None
 
 
 class HealthResponse(BaseModel):
