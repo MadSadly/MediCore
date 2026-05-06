@@ -130,26 +130,9 @@ class GradCAMEngine:
             img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
             h_orig, w_orig = img_rgb.shape[:2]
 
-            # zero-padding (model.py와 동일)
-            scale = IMG_SIZE / max(h_orig, w_orig)
-            nh, nw = int(h_orig * scale), int(w_orig * scale)
-            img_padded = cv2.resize(img_rgb, (nw, nh), interpolation=cv2.INTER_LINEAR)
-            ph = IMG_SIZE - nh
-            pw = IMG_SIZE - nw
-            top_pad = ph // 2
-            bottom_pad = ph - top_pad
-            left_pad = pw // 2
-            right_pad = pw - left_pad
-            img_padded = cv2.copyMakeBorder(
-                img_padded,
-                top_pad,
-                bottom_pad,
-                left_pad,
-                right_pad,
-                cv2.BORDER_CONSTANT,
-                value=0,
-            )
-            img_float = img_padded.astype(np.float32) / 255.0
+            # 모델 입력: 224x224 단순 리사이즈
+            img_resized = cv2.resize(img_rgb, (IMG_SIZE, IMG_SIZE))
+            img_float = img_resized.astype(np.float32) / 255.0
 
             # input tensor
             model = self._cam.model
@@ -158,19 +141,15 @@ class GradCAMEngine:
                 ((img_float - IMG_MEAN) / IMG_STD).transpose(2, 0, 1)
             ).unsqueeze(0).float().to(device)
 
-            # GradCAM 실행
+            # GradCAM 실행 (224x224)
             targets = [ClassifierOutputTarget(int(disease_id))]
             grayscale_cam = self._cam(
                 input_tensor=input_tensor,
                 targets=targets,
-            )[0]  # 224x224
+            )[0]
 
-            # 패딩 crop → 원본 크기로 resize
-            cam_content = grayscale_cam[
-                top_pad : IMG_SIZE - bottom_pad if bottom_pad > 0 else IMG_SIZE,
-                left_pad : IMG_SIZE - right_pad if right_pad > 0 else IMG_SIZE,
-            ]
-            cam_resized = cv2.resize(cam_content, (w_orig, h_orig))
+            # 히트맵을 원본 크기로 리사이즈
+            cam_resized = cv2.resize(grayscale_cam, (w_orig, h_orig))
 
             # 원본 이미지에 오버레이
             img_orig_float = img_rgb.astype(np.float32) / 255.0
