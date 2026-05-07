@@ -6,7 +6,7 @@ torchvision==0.17.0
 opencv-python-headless
 grad-cam==1.5.0
 Pillow
-numpy
+numpy<2
 python-dotenv
 google-cloud-aiplatform>=1.49.0
 psycopg2-binary>=2.9.9
