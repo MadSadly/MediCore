@@ -38,6 +38,11 @@ public class KidneyDiagnosisController {
         resultMap.put("severity",         req.getSeverity());
         resultMap.put("dialysisRequired", req.isDialysisRequired());
         if (req.getProbabilities() != null) resultMap.put("probabilities", req.getProbabilities());
+        if (req.getRagAnswer()     != null) resultMap.put("ragAnswer",     req.getRagAnswer());
+
+        // 환자 기본 정보
+        if (req.getAge() != null) resultMap.put("age", req.getAge());
+        if (req.getSex() != null) resultMap.put("sex", req.getSex());
 
         // 임상 수치
         if (req.getEgfr()  != null) resultMap.put("egfr",  req.getEgfr());

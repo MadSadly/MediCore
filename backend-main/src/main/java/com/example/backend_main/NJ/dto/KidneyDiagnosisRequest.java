@@ -16,6 +16,7 @@ public class KidneyDiagnosisRequest {
     private String severity;
     private boolean dialysisRequired;
     private Map<String, Double> probabilities;
+    private String ragAnswer;
 
     // 임상 수치
     private Double egfr;
@@ -26,6 +27,10 @@ public class KidneyDiagnosisRequest {
     private Double bp;
     private Double bgr;
     private Double hemo;
+
+    // 환자 기본 정보
+    private Double age;
+    private String sex;
 
     // 동반 증상
     private String htn;
