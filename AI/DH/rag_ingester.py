@@ -118,7 +118,8 @@ def ingest_data_to_pgvector():
     print("💾 [3/4] PostgreSQL 데이터베이스 연결 중...")
 
     # 환경 변수에서 DB 정보 가져오기 (비밀번호 누락 시 에러 발생)
-    db_host = os.getenv("DB_HOST", "192.168.0.20")
+    #db_host = os.getenv("DB_HOST", "192.168.0.20")
+    db_host = os.getenv("DB_HOST", "localhost")
     db_port = os.getenv("DB_PORT", "5432")
     db_name = os.getenv("DB_NAME", "medicoredb")
     db_user = os.getenv("DB_USER", "medicore")
