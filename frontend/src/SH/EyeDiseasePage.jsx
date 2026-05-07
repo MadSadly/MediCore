@@ -259,12 +259,15 @@ export default function EyeDiseasePage() {
           />
         )}
 
-        <div>
-          <h1 className="text-xl font-bold text-slate-100">안과 AI 진단</h1>
-          <p className="text-sm text-slate-400 mt-0.5">
-            환자 {!patientId ? "(ID 없음)" : `#${patientId}`} · 안저 이미지를 업로드하면 AI가 5개 질환을 분석합니다.
-          </p>
-        </div>
+        <header className="overflow-hidden rounded-xl border border-slate-800/70 bg-[#0b111e] shadow-[0_12px_40px_-18px_rgba(0,0,0,0.55)]">
+          <div className="h-[3px] w-full shrink-0 bg-emerald-500" aria-hidden />
+          <div className="px-4 pt-5 pb-5 sm:px-5">
+            <h1 className="text-xl font-bold tracking-tight text-white">안과 AI 진단</h1>
+            <p className="mt-1.5 text-sm text-slate-400 leading-snug">
+              환자 {!patientId ? "(ID 없음)" : `#${patientId}`} · 안저 이미지를 업로드하면 AI가 5개 질환을 분석합니다.
+            </p>
+          </div>
+        </header>
 
         <ImageUpload
           onImageSelect={(file, _previewUrlFromChild) => {

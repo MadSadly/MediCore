@@ -67,7 +67,6 @@ export default function ImageUpload({ onImageSelect, disabled }) {
           <img src={preview} alt="미리보기" className="mx-auto max-h-64 rounded-lg object-contain" />
         ) : (
           <div className="text-slate-400">
-            <p className="text-4xl mb-2">👁️</p>
             <p className="font-medium text-slate-200">안저 이미지를 드래그하거나 클릭하여 업로드</p>
             <p className="text-sm mt-1">JPG · PNG · TIFF / 최대 20MB</p>
           </div>
