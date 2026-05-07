@@ -7,7 +7,7 @@ import { AlertCircle } from "lucide-react";
 export default function AiDisclaimer({ className = "" }) {
   return (
     <aside
-      className={`flex gap-3 rounded-lg border border-slate-700/50 bg-slate-800/30 px-4 py-3 text-sm leading-relaxed text-slate-400 ${className}`}
+      className={`flex gap-3 rounded-lg border border-slate-700/70 bg-[#0b111e] px-4 py-3 text-sm leading-relaxed text-slate-400 ${className}`}
       role="note"
     >
       <AlertCircle

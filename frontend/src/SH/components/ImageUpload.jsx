@@ -55,8 +55,8 @@ export default function ImageUpload({ onImageSelect, disabled }) {
   return (
     <div className="flex flex-col items-center gap-4 w-full">
       <div
-        className={`w-full border-2 border-dashed rounded-xl p-6 text-center transition-colors
-          ${dragging ? "border-sky-400 bg-sky-500/10" : "border-slate-600 bg-slate-800/40"}
+        className={`w-full min-h-[220px] border-2 border-dashed rounded-xl p-6 text-center transition-colors flex items-center justify-center
+          ${dragging ? "border-sky-400 bg-sky-500/10" : "border-slate-700/70 bg-[#0b111e]"}
           ${disabled ? "opacity-50 pointer-events-none" : "cursor-pointer hover:border-sky-500/60"}`}
         onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
         onDragLeave={() => setDragging(false)}
