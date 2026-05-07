@@ -56,7 +56,7 @@ def write_final_report(state: AgentState):
     response = llm.invoke(prompt)
     return {"final_report": response.content}
 
-# 4. 그래프 조립
+# 4. 랭그래프 조립
 workflow = StateGraph(AgentState)
 workflow.add_node("analyzer", analyze_data)
 workflow.add_node("expert", write_medical_note)
