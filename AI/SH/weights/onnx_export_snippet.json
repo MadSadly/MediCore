@@ -1,0 +1,8 @@
+{
+  "onnx_path": "D:\\Models\\AI-finally\\Test_Model\\Sample\\swin_base_final_export.onnx",
+  "onnx_export_ok": true,
+  "onnx_export_error": null,
+  "backbone": "swin_base_patch4_window7_224",
+  "input_size": 224,
+  "num_classes": 5
+}
