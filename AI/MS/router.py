@@ -11,6 +11,11 @@ logger = logging.getLogger("medicore.skin.router")
 router = APIRouter(prefix="/ai")
 
 
+@router.get("/health")
+async def health():
+    return {"status": "ok", "module": "skin"}
+
+
 def _state_to_response(state: dict, image_name: str) -> DiagnoseResponse:
     """파이프라인 State → DiagnoseResponse 변환."""
     quality_obj = QualityCheck(
