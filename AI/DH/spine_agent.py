@@ -11,9 +11,9 @@ class AgentState(TypedDict):
     medical_note: str      # 의학적 소견
     final_report: str      # 환자용 최종 리포트
 
-os.environ["GEMINI_MODEL"] = "gemini-1.5-flash"
+os.environ["GEMINI_MODEL"] = "gemini-1.0-pro"
 
-llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash")
+llm = ChatGoogleGenerativeAI(model="gemini-1.0-pro")
 print(f"🚨🚨 [최종 검문] 지금 LLM이 쓸 모델은 확실하게: {llm.model} 입니다! 🚨🚨")
 
 # 3. 노드 함수들 정의 (프롬프트 변경)
