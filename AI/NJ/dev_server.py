@@ -36,14 +36,14 @@ async def _startup_diagnostic():
 
     if USE_VERTEX_LLM:
         model = os.getenv("GEMINI_MODEL", "gemini-1.5-flash-002")
-        mode  = f"✅ Vertex AI ({model} @ {location})"
+        mode  = f"[OK] Vertex AI ({model} @ {location})"
     elif USE_OLLAMA:
-        mode  = f"🔧 Ollama ({os.getenv('OLLAMA_MODEL', 'llama3.1')})"
+        mode  = f"[DEV] Ollama ({os.getenv('OLLAMA_MODEL', 'llama3.1')})"
     else:
-        mode  = "❌ 규칙 기반 폴백 (LLM 미연동)"
+        mode  = "[FALLBACK] Rule-based (no LLM)"
 
-    proj_display = project if project else "❌ 미설정"
-    key_display  = key_path if key_path else "❌ 미설정"
+    proj_display = project if project else "[NOT SET]"
+    key_display  = key_path if key_path else "[NOT SET]"
 
     print("\n" + "=" * 60)
     print(f"  [Kidney] .env 경로        : {_env_path}")

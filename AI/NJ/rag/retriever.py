@@ -23,16 +23,22 @@ import psycopg2.extras
 logger = logging.getLogger("medicore.kidney.retriever")
 
 MODULE_TAG    = "kidney"
-EMBEDDING_DIM = 1024
+EMBEDDING_DIM = 768
 
 USE_GEMINI = bool(
     os.getenv("GCP_PROJECT_ID") and
     os.getenv("GCP_PROJECT_ID") != "placeholder"
 )
 
+_db_user = os.getenv("DB_USER", "medicore")
+_db_pass = os.getenv("DB_PASSWORD", "")
+_db_host = os.getenv("DB_HOST", "127.0.0.1")
+_db_port = os.getenv("DB_PORT", "5432")
+_db_name = os.getenv("DB_NAME", "medicoredb")
+
 DB_URL = os.getenv(
     "DB_URL",
-    "postgresql://medizero:testpassword@127.0.0.1:5432/medizerodb"
+    f"postgresql://{_db_user}:{_db_pass}@{_db_host}:{_db_port}/{_db_name}"
 )
 
 _embedder      = None
@@ -69,10 +75,14 @@ class _BGEWrapper:
 
     def encode(self, text: str):
         if self._backend == "flag":
-            return self._m.encode(text)
-        return self._m.encode(
-            _QUERY_INSTRUCTION + text, normalize_embeddings=True
-        )
+            vec = self._m.encode(text)
+        else:
+            vec = self._m.encode(
+                _QUERY_INSTRUCTION + text, normalize_embeddings=True
+            )
+        # DB schema is VECTOR(768); BGE-M3 outputs 1024-dim
+        # Matryoshka training keeps first N dims meaningful
+        return vec[:EMBEDDING_DIM]
 
 
 def _init_vertexai() -> None:
