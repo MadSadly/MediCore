@@ -13,17 +13,16 @@ import psycopg2
 from psycopg2.extras import execute_values
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.document_loaders import PyPDFLoader
-from FlagEmbedding import FlagModel
 
-load_dotenv()
+load_dotenv(Path(__file__).resolve().parents[3] / ".env")
 
 # ── DB 설정 ──────────────────────────────────────────────────
 DB_CONFIG = {
-    "host": "127.0.0.1",
-    "port": 5432,
-    "dbname": "medizerodb",
-    "user": "medizero",
-    "password": "testpassword",
+    "host":     os.getenv("DB_HOST", "127.0.0.1"),
+    "port":     int(os.getenv("DB_PORT", "5432")),
+    "dbname":   os.getenv("DB_NAME", "medicoredb"),
+    "user":     os.getenv("DB_USER", "medicore"),
+    "password": os.getenv("DB_PASSWORD", ""),
 }
 
 MODULE_TAG  = "kidney"
@@ -31,25 +30,38 @@ CHUNK_SIZE  = 800
 CHUNK_OVERLAP = 100
 
 # ── BGE-M3 로드 ──────────────────────────────────────────────
-print("🔄 BGE-M3 로드 중... (첫 실행 시 2.3GB 다운로드)")
-embedding_model = FlagModel(
-    "BAAI/bge-m3",
-    use_fp16=True,
-    query_instruction_for_retrieval=(
-        "Represent this medical query for searching relevant passages: "
+print("[*] BGE-M3 로드 중... (첫 실행 시 2.3GB 다운로드)")
+try:
+    from FlagEmbedding import FlagModel
+    embedding_model = FlagModel(
+        "BAAI/bge-m3",
+        use_fp16=False,
+        query_instruction_for_retrieval=(
+            "Represent this medical query for searching relevant passages: "
+        )
     )
-)
-print("✅ BGE-M3 로드 완료\n")
+    _backend = "flag"
+except Exception as e:
+    print(f"[!] FlagEmbedding 로드 실패 ({e}) — sentence-transformers 폴백")
+    from sentence_transformers import SentenceTransformer
+    embedding_model = SentenceTransformer("BAAI/bge-m3", device="cpu")
+    _backend = "sbert"
+print(f"[OK] BGE-M3 로드 완료 [{_backend}]\n")
 
+
+_QUERY_INSTRUCTION = "Represent this medical query for searching relevant passages: "
+EMBEDDING_DIM = 768  # DB schema: VECTOR(768)
 
 def embed_batch(texts: list[str], batch_size: int = 16) -> list[list[float]]:
-    """배치 임베딩"""
+    """배치 임베딩 — BGE-M3 1024차원 출력을 768로 잘라서 반환 (Matryoshka)"""
+    if _backend == "sbert":
+        texts = [_QUERY_INSTRUCTION + t for t in texts]
     embeddings = embedding_model.encode(
         texts,
         batch_size=batch_size,
-        max_length=8192,
+        **({"max_length": 8192} if _backend == "flag" else {}),
     )
-    return embeddings.tolist()
+    return [e[:EMBEDDING_DIM].tolist() for e in embeddings]
 
 
 def load_and_split(pdf_path: str, max_pages: int = None) -> list[str]:

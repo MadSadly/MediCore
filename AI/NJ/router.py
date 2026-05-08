@@ -148,6 +148,11 @@ def check_alerts(req: KidneyDiagnoseRequest, prediction: str) -> list[Alert]:
 
 
 # ── 라우터 ─────────────────────────────────────────────────────────────
+@router.get("/health")
+def health_check():
+    return {"status": "ok"}
+
+
 @router.get("/ai/kidney/health", response_model=HealthResponse)
 def kidney_health():
     try:
