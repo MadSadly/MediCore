@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import ReactMarkdown from 'react-markdown';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { Upload, Activity, FileText, ChevronRight, AlertCircle, Database, LayoutGrid, CheckSquare } from 'lucide-react';
 import axios from 'axios';
@@ -170,20 +171,38 @@ export default function SpineDiskPage() {
                 </button>
               </div>
           ) : (
-              /* 결과 화면 (기존과 동일하게 유지하되, 나중에 RAG 리포트를 추가로 렌더링하면 됨) */
+              /* 결과 화면 */
               <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700 text-left">
+
+                {/* 🎯 해결 1: 업로드했던 원본 MRI 사진 다시 보여주기 */}
+                <div className="bg-slate-900 border border-slate-800 p-4 rounded-xl text-center">
+                  <h3 className="text-slate-400 text-sm font-bold mb-3">분석된 MRI 이미지</h3>
+                  <img src={image} alt="Analyzed MRI" className="max-h-64 mx-auto rounded-lg shadow-lg border border-slate-700" />
+                </div>
+
                 {/* ... 기존 시각화 차트 및 그리드 코드 유지 ... */}
 
-                {/* [NEW] LLM 통합 소견 노출부 */}
-                <div className="bg-blue-600/10 border-l-4 border-blue-500 p-5 rounded-r-xl">
-                  <div className="flex items-center gap-2 mb-2 text-blue-400">
-                    <FileText size={16} />
-                    <span className="font-bold text-xs uppercase">AI CDSS Final Report (Vision + Text)</span>
+                {/* 🎯 해결 2: LLM 통합 소견 마크다운으로 예쁘게 노출하기 */}
+                <div className="bg-slate-800/50 border border-slate-700 p-6 rounded-xl">
+                  <div className="flex items-center gap-2 mb-4 border-b border-slate-700 pb-3">
+                    <FileText size={20} className="text-blue-400" />
+                    <span className="font-bold text-lg text-slate-200">AI CDSS Final Report</span>
                   </div>
-                  <p className="text-slate-300 text-sm leading-relaxed whitespace-pre-wrap">
-                    {/* 백엔드에서 받은 최종 리포트를 여기에 뿌려줍니다. */}
-                    {result.result.llmFinalReport || "통합 분석 결과를 가져오는 중입니다..."}
-                  </p>
+
+                  {/* 리액트 마크다운 적용: 글씨 크기, 줄바꿈, 굵기 등이 자동으로 예쁘게 잡힙니다 */}
+                  <div className="text-slate-300 text-sm leading-relaxed whitespace-pre-wrap markdown-body">
+                    <ReactMarkdown
+                        components={{
+                          h3: ({node: _, ...props}) => <h3 className="text-lg font-bold text-blue-300 mt-6 mb-2" {...props} />,
+                          strong: ({node: _, ...props}) => <strong className="text-white font-bold" {...props} />,
+                          ul: ({node: _, ...props}) => <ul className="list-disc pl-5 my-2 space-y-1" {...props} />,
+                          li: ({node: _, ...props}) => <li className="text-slate-300" {...props} />,
+                          hr: ({node: _, ...props}) => <hr className="border-slate-700 my-4" {...props} />
+                        }}
+                    >
+                      {result.llmFinalReport || "통합 분석 결과를 가져오는 중입니다..."}
+                    </ReactMarkdown>
+                  </div>
                 </div>
 
                 <button onClick={() => {setResult(null); setImage(null);}} className="w-full text-slate-600 text-xs hover:text-slate-400 py-2 transition-colors">
