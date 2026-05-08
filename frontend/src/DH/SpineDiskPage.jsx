@@ -182,7 +182,7 @@ export default function SpineDiskPage() {
                   </div>
                   <p className="text-slate-300 text-sm leading-relaxed whitespace-pre-wrap">
                     {/* 백엔드에서 받은 최종 리포트를 여기에 뿌려줍니다. */}
-                    {result.final_report || "통합 분석 결과를 가져오는 중입니다..."}
+                    {result.result.llmFinalReport || "통합 분석 결과를 가져오는 중입니다..."}
                   </p>
                 </div>
 
