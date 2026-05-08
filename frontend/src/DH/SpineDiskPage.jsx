@@ -70,7 +70,8 @@ export default function SpineDiskPage() {
     formData.append("clinicalData", JSON.stringify(clinicalData));
 
     try {
-      const response = await axios.post('http://localhost:8080/api/analyze/spine', formData, {
+      const response = await axios.post('http://192.168.0.13:8000/ai/spine/analyze', formData, {
+      //const response = await axios.post('http://localhost:8000/ai/spine/analyze', formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
       setResult(response.data);

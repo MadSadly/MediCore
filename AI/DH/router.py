@@ -13,10 +13,15 @@ from DH.spine_inference import preprocess_image, get_diagnosis_json
 from DH.spine_agent import app as langgraph_app
 
 # APIRouter 생성 (prefix를 주어 엔드포인트를 깔끔하게 관리)
-router = APIRouter(prefix="/api/dh/spine", tags=["Spine Diagnosis"])
+router = APIRouter(prefix="/ai/spine", tags=["Spine Diagnosis"])
 
 vision_model = None
 device = None
+
+# [추가] 헬스체크 및 프론트엔드 연결 확인용
+@router.get("")
+def check_health():
+    return {"status": "ok", "message": "척추 AI 서버가 정상 작동 중입니다."}
 
 # 서버 시작 시 모델 로드
 @router.on_event("startup")
