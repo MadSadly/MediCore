@@ -2,11 +2,11 @@
 임베딩 + pgvector 검색
 
 [개발 모드] GCP_PROJECT_ID 미설정:
-    임베딩: BGE-M3  1024차원 (로컬, GCP 불필요)
+    임베딩: BGE-M3  768차원 (로컬, GCP 불필요)
 [실전 모드] GCP_PROJECT_ID 설정:
-    임베딩: gemini-embedding-001  output_dimensionality=1024 (Vertex AI)
+    임베딩: gemini-embedding-001  output_dimensionality=768 (Vertex AI)
 
-→ 양쪽 모두 1024차원 — 전환 시 DB 재임베딩 불필요
+→ 양쪽 모두 768차원 — 전환 시 DB 재임베딩 불필요
 """
 
 from __future__ import annotations
@@ -71,7 +71,7 @@ class _BGEWrapper:
             from sentence_transformers import SentenceTransformer
             self._m = SentenceTransformer("BAAI/bge-m3", device="cpu")
             self._backend = "sbert"
-        logger.info(f"임베딩: BGE-M3 [{self._backend}] (1024차원)")
+        logger.info(f"임베딩: BGE-M3 [{self._backend}] (768차원)")
 
     def encode(self, text: str):
         if self._backend == "flag":
@@ -80,7 +80,7 @@ class _BGEWrapper:
             vec = self._m.encode(
                 _QUERY_INSTRUCTION + text, normalize_embeddings=True
             )
-        # DB schema is VECTOR(768); BGE-M3 outputs 1024-dim
+        # DB schema is VECTOR(768); BGE-M3 outputs 768-dim
         # Matryoshka training keeps first N dims meaningful
         return vec[:EMBEDDING_DIM]
 
@@ -117,14 +117,14 @@ def _get_embedder():
             _init_vertexai()
             from vertexai.language_models import TextEmbeddingModel
             _embedder = TextEmbeddingModel.from_pretrained("gemini-embedding-001")
-            logger.info("임베딩: gemini-embedding-001 (1024차원, Vertex AI)")
+            logger.info("임베딩: gemini-embedding-001 (768차원, Vertex AI)")
         else:
             _embedder = _BGEWrapper()
     return _embedder
 
 
 def embed_query(text: str) -> list[float]:
-    """쿼리 텍스트를 1024차원 벡터로 변환."""
+    """쿼리 텍스트를 768차원 벡터로 변환."""
     try:
         model = _get_embedder()
         if USE_GEMINI:
