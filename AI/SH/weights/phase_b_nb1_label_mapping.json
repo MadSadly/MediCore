@@ -1,0 +1,17 @@
+{
+  "class_map": {
+    "normal": 0,
+    "glaucoma": 1,
+    "cataract": 2,
+    "dr": 3,
+    "amd": 4
+  },
+  "class_names": {
+    "0": "normal",
+    "1": "glaucoma",
+    "2": "cataract",
+    "3": "dr",
+    "4": "amd"
+  },
+  "num_classes": 5
+}

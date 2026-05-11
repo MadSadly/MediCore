@@ -18,7 +18,7 @@ import networkx as nx
 _DATA_DIR = Path(__file__).resolve().parents[1] / "data"
 GRAPH_PKL = _DATA_DIR / "graph.pkl"
 
-MAX_BFS_DEPTH = 4
+MAX_BFS_DEPTH = 2
 
 
 # 한국어 질환명(DL 결과) ↔ 그래프 엔티티 id에 쓰이는 영문 토큰 힌트
@@ -231,7 +231,13 @@ class GraphRetriever:
                 return big, 0
             return (rank_map.get(ri, big), ri)
 
-        return sorted(rows, key=sort_key)
+        # Promote-only: Hybrid 1위는 고정, 2위 이하만 Graph 점수로 재정렬
+        top1 = rows[0]
+        rest = rows[1:]
+        if not rest:
+            return [top1]
+        reranked_rest = sorted(rest, key=sort_key)
+        return [top1] + reranked_rest
 
 
 graph_retriever = GraphRetriever()
