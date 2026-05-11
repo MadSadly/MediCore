@@ -85,6 +85,10 @@ export default function EyeDiseasePage() {
   const [inferenceMs, setInferenceMs] = useState(null);
 
   const analyzeAbortRef = useRef(null);
+  const latestDlResultRef = useRef(null);
+  const latestEmergencyRef = useRef(null);
+  const latestInferenceMsRef = useRef(null);
+  const latestQualityScoreRef = useRef(null);
 
   useEffect(() => {
     return () => {
@@ -110,6 +114,10 @@ export default function EyeDiseasePage() {
     setError(null);
     setQualityScore(null);
     setInferenceMs(null);
+    latestDlResultRef.current = null;
+    latestEmergencyRef.current = null;
+    latestInferenceMsRef.current = null;
+    latestQualityScoreRef.current = null;
   };
 
   /** 분석 상태만 초기화한 뒤, 선택된 파일이 있으면 원본 미리보기 URL 재발급 (GradCAM 연동용) */
@@ -140,6 +148,54 @@ export default function EyeDiseasePage() {
     resetLoading();
     clearAnalysisState();
     syncPreviewUrlFromSelectedFile();
+  };
+
+  const saveDiagnosisToBackend = async (inferenceTimeMs, qualityScoreValue) => {
+    try {
+      const latestDlResult = latestDlResultRef.current;
+      if (!latestDlResult?.primary_disease || !patientId) return;
+
+      const diseaseName = latestDlResult.primary_disease.disease_name ?? "미분류";
+      const confidence = Number(latestDlResult.primary_disease.confidence ?? 0);
+      const title = `${diseaseName} ${(confidence * 100).toFixed(1)}%`;
+
+      const stageName = latestDlResult.stage?.stage_name || "";
+      const isEmergency = !!latestEmergencyRef.current?.is_emergency;
+      const summary = isEmergency ? `응급 | ${stageName}` : (stageName || "정상");
+
+      const resultJson = JSON.stringify({
+        primary_disease: latestDlResult.primary_disease,
+        all_scores: latestDlResult.all_scores,
+        stage: latestDlResult.stage,
+        is_emergency: latestEmergencyRef.current?.is_emergency,
+        emergency_level: latestEmergencyRef.current?.emergency_level,
+        inference_time_ms: inferenceTimeMs,
+        quality_score: qualityScoreValue,
+      });
+
+      const createdBy =
+        localStorage.getItem("name") ||
+        localStorage.getItem("email") ||
+        "SH";
+      const token = localStorage.getItem("token");
+
+      await fetch(`/api/patients/${patientId}/diagnoses`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          diseaseType: "eye-disease",
+          title,
+          summary,
+          resultJson,
+          createdBy,
+        }),
+      });
+    } catch (saveErr) {
+      console.warn("안과 진단 결과 저장 실패:", saveErr);
+    }
   };
 
   const handleAnalyze = async () => {
@@ -175,13 +231,16 @@ export default function EyeDiseasePage() {
 
             case "dl_result":
               setDlResult(data.dl_result);
+              latestDlResultRef.current = data.dl_result;
               setInferenceMs(data.inference_time_ms);
+              latestInferenceMsRef.current = data.inference_time_ms;
               setStep(STEPS.DL_DONE);
               setGradcamLoading(true);
               break;
 
             case "emergency":
               setEmergency(data.emergency);
+              latestEmergencyRef.current = data.emergency;
               if (data.emergency?.is_emergency) setShowEmergency(true);
               break;
 
@@ -204,13 +263,27 @@ export default function EyeDiseasePage() {
               break;
 
             case "done":
-              resetLoading();
-              if (data.inference_time_ms != null) setInferenceMs(data.inference_time_ms);
-              if (data.quality_score != null) setQualityScore(data.quality_score);
-              setStep(STEPS.DONE);
+              void (async () => {
+                resetLoading();
+                let finalInferenceMs = latestInferenceMsRef.current;
+                let finalQualityScore = latestQualityScoreRef.current;
+                if (data.inference_time_ms != null) {
+                  finalInferenceMs = data.inference_time_ms;
+                  setInferenceMs(data.inference_time_ms);
+                  latestInferenceMsRef.current = data.inference_time_ms;
+                }
+                if (data.quality_score != null) {
+                  finalQualityScore = data.quality_score;
+                  setQualityScore(data.quality_score);
+                  latestQualityScoreRef.current = data.quality_score;
+                }
+                await saveDiagnosisToBackend(finalInferenceMs, finalQualityScore);
+                setStep(STEPS.DONE);
+              })();
               break;
 
             case "error":
+              console.error("[SH analyze] SSE error event:", data);
               setError(friendlyErrorMessage(data.message));
               resetLoading();
               setStep(STEPS.ERROR);
@@ -224,6 +297,7 @@ export default function EyeDiseasePage() {
       );
     } catch (err) {
       if (isAbortError(err)) return;
+      console.error("[SH analyze] request failed:", err);
       setError(friendlyErrorMessage(err.message));
       resetLoading();
       setStep(STEPS.ERROR);

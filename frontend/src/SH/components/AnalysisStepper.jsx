@@ -20,49 +20,72 @@ export default function AnalysisStepper({ step }) {
   const safeIdx = currentIdx >= 0 ? currentIdx : 0;
 
   return (
-    <div className="w-full overflow-x-auto pb-1 -mx-1 px-1">
-      <div className="flex flex-row flex-nowrap items-center gap-0 min-w-min py-2">
-        {DISPLAY_STEPS.map((s, i) => {
-          const done = i < safeIdx;
-          const active = i === safeIdx;
+    <>
+      <div
+        className="sh-stepper-scroll w-full overflow-x-auto pb-1 -mx-1 px-1"
+        style={{ scrollbarWidth: "thin", scrollbarColor: "#0ea5e9 #0b111e" }}
+      >
+        <div className="mx-auto flex w-max flex-row flex-nowrap items-center gap-0 py-2">
+          {DISPLAY_STEPS.map((s, i) => {
+            const done = i < safeIdx;
+            const active = i === safeIdx;
 
-          const circleBase =
-            "flex h-9 w-9 shrink-0 items-center justify-center rounded-full border text-xs font-bold transition-colors";
+            const circleBase =
+              "flex h-9 w-9 shrink-0 items-center justify-center rounded-full border text-xs font-bold transition-colors";
 
-          const circleCls = done
-            ? `${circleBase} border-transparent bg-transparent text-emerald-400 leading-none`
-            : active
-              ? `${circleBase} animate-pulse border-sky-400 bg-sky-500 text-white shadow-[0_0_14px_rgba(56,189,248,0.35)]`
-              : `${circleBase} border-slate-600 bg-slate-800 text-slate-500`;
+            const circleCls = done
+              ? `${circleBase} border-transparent bg-transparent text-emerald-400 leading-none`
+              : active
+                ? `${circleBase} animate-pulse border-sky-400 bg-sky-500 text-white shadow-[0_0_14px_rgba(56,189,248,0.35)]`
+                : `${circleBase} border-slate-600 bg-slate-800 text-slate-500`;
 
-          const textCls = done
-            ? "text-slate-100"
-            : active
-              ? "text-sky-400 font-semibold"
-              : "text-slate-600";
+            const textCls = done
+              ? "text-slate-100"
+              : active
+                ? "text-sky-400 font-semibold"
+                : "text-slate-600";
 
-          const circleInner = done ? "✅" : i + 1;
+            const circleInner = done ? "✅" : i + 1;
 
-          return (
-            <div key={s.key} className="flex flex-row flex-nowrap items-center shrink-0">
-              <div className="flex flex-col items-center px-2 min-w-[4.25rem] sm:min-w-[4.75rem]">
-                <div className={circleCls} aria-current={active ? "step" : undefined}>
-                  {circleInner}
+            return (
+              <div key={s.key} className="flex flex-row flex-nowrap items-center shrink-0">
+                <div className="flex flex-col items-center px-2 min-w-[4.25rem] sm:min-w-[4.75rem]">
+                  <div className={circleCls} aria-current={active ? "step" : undefined}>
+                    {circleInner}
+                  </div>
+                  <span className={`mt-1.5 text-center text-[11px] leading-snug whitespace-nowrap ${textCls}`}>
+                    {s.label}
+                  </span>
                 </div>
-                <span className={`mt-1.5 text-center text-[11px] leading-snug whitespace-nowrap ${textCls}`}>
-                  {s.label}
-                </span>
+                {i < DISPLAY_STEPS.length - 1 && (
+                  <div
+                    className={`mx-1 h-[1px] w-6 shrink-0 sm:w-10 ${done ? "bg-emerald-500/55" : "bg-slate-700/75"}`}
+                    aria-hidden
+                  />
+                )}
               </div>
-              {i < DISPLAY_STEPS.length - 1 && (
-                <div
-                  className={`mx-1 h-[1px] w-6 shrink-0 sm:w-10 ${done ? "bg-emerald-500/55" : "bg-slate-700/75"}`}
-                  aria-hidden
-                />
-              )}
-            </div>
-          );
-        })}
+            );
+          })}
+        </div>
       </div>
-    </div>
+      <style>
+        {`
+          .sh-stepper-scroll::-webkit-scrollbar {
+            height: 8px;
+          }
+          .sh-stepper-scroll::-webkit-scrollbar-track {
+            background: #0b111e;
+            border-radius: 9999px;
+          }
+          .sh-stepper-scroll::-webkit-scrollbar-thumb {
+            background: linear-gradient(90deg, #0ea5e9, #14b8a6);
+            border-radius: 9999px;
+          }
+          .sh-stepper-scroll::-webkit-scrollbar-thumb:hover {
+            background: linear-gradient(90deg, #38bdf8, #2dd4bf);
+          }
+        `}
+      </style>
+    </>
   );
 }
