@@ -12,7 +12,7 @@ CREATE TABLE worker_nodes (
                     -- HEALTHY: 정상 | UNHEALTHY: 장애 | UNKNOWN: 미확인
     circuit_state   VARCHAR(20)  NOT NULL DEFAULT 'CLOSED',
                     -- CLOSED: 정상 통신 | OPEN: 차단(장애) | HALF_OPEN: 복구 시도 중
-    fail_count      INT      ㅂ    NOT NULL DEFAULT 0,  -- 연속 실패 횟수
+    fail_count      INT          NOT NULL DEFAULT 0,  -- 연속 실패 횟수
     open_at         TIMESTAMP,                         -- OPEN 상태로 전환된 시각
     last_checked_at TIMESTAMP,                         -- 마지막 헬스체크 시각
     response_time_ms BIGINT,                           -- 응답 시간 (ms)
