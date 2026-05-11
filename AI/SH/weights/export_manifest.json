@@ -1,9 +1,0 @@
-{
-  "winner_slug": "swin_base",
-  "winner_checkpoint": "D:\\Models\\AI-finally\\final\\artifacts\\phase_b\\nb03_baseline\\weights\\swin_base_final.pth",
-  "sample_dir": "D:\\Models\\AI-finally\\Test_Model\\Sample",
-  "copied_files": {
-    "threshold": "D:\\Models\\AI-finally\\Test_Model\\Sample\\threshold_config.json",
-    "label_mapping": "D:\\Models\\AI-finally\\Test_Model\\Sample\\label_mapping.json"
-  }
-}

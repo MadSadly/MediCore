@@ -148,6 +148,11 @@ class GradCAMEngine:
                 targets=targets,
             )[0]
 
+            cam_min = grayscale_cam.min()
+            cam_max = grayscale_cam.max()
+            if cam_max - cam_min > 1e-8:
+                grayscale_cam = (grayscale_cam - cam_min) / (cam_max - cam_min)
+
             # 히트맵을 원본 크기로 리사이즈
             cam_resized = cv2.resize(grayscale_cam, (w_orig, h_orig))
 
