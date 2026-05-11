@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useParams } from 'react-router-dom'
 import axios from 'axios'
 
-const AI_URL = import.meta.env.VITE_AI_URL ?? 'http://localhost:8000'
+const AI_URL = import.meta.env.VITE_AI_URL ?? 'http://192.168.0.5:8000'
 
 const CKD_STAGES = [
   { key: 'Normal_Stage1', label: '정상/1단계', gfr: 'GFR ≥ 90',  risk: 'LOW',  min: 90  },
