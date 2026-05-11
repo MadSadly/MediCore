@@ -72,10 +72,9 @@ export default function SpineDiskPage() {
 
     try {
       const response = await axios.post('http://192.168.0.20:8080/ai/spine/analyze', formData, {
-<<<<<<< HEAD
-=======
+
       //const response = await axios.post('http://localhost:8000/ai/spine/analyze', formData, {
->>>>>>> 3dbcaf0ddc28a95a465eab477f283a4640f79485
+
         headers: { 'Content-Type': 'multipart/form-data' }
       });
       setResult(response.data);
