@@ -4,7 +4,7 @@
 
 import { useState, useRef, useEffect } from "react";
 
-export default function ImageUpload({ onImageSelect, onPreviewObjectUrl, disabled }) {
+export default function ImageUpload({ onImageSelect, disabled }) {
   const [preview, setPreview] = useState(null);
   const [dragging, setDragging] = useState(false);
   const [error, setError] = useState(null);
@@ -15,10 +15,6 @@ export default function ImageUpload({ onImageSelect, onPreviewObjectUrl, disable
       if (preview) URL.revokeObjectURL(preview);
     };
   }, [preview]);
-
-  useEffect(() => {
-    onPreviewObjectUrl?.(preview ?? null);
-  }, [preview, onPreviewObjectUrl]);
 
   const handleFile = (file) => {
     setError(null);
@@ -32,11 +28,13 @@ export default function ImageUpload({ onImageSelect, onPreviewObjectUrl, disable
       setError("파일이 20MB를 넘습니다. 안저가 선명하게 보이도록 압축하거나 다른 사진을 올려 주세요.");
       return;
     }
+
+    const url = URL.createObjectURL(file);
     setPreview((prev) => {
       if (prev) URL.revokeObjectURL(prev);
-      return URL.createObjectURL(file);
+      return url;
     });
-    onImageSelect(file);
+    onImageSelect(file, url);
   };
 
   const handleDrop = (e) => {
@@ -51,14 +49,14 @@ export default function ImageUpload({ onImageSelect, onPreviewObjectUrl, disable
       if (prev) URL.revokeObjectURL(prev);
       return null;
     });
-    onImageSelect(null);
+    onImageSelect(null, null);
   };
 
   return (
     <div className="flex flex-col items-center gap-4 w-full">
       <div
-        className={`w-full border-2 border-dashed rounded-xl p-6 text-center transition-colors
-          ${dragging ? "border-sky-400 bg-sky-500/10" : "border-slate-600 bg-slate-800/40"}
+        className={`w-full min-h-[220px] border-2 border-dashed rounded-xl p-6 text-center transition-colors flex items-center justify-center
+          ${dragging ? "border-sky-400 bg-sky-500/10" : "border-slate-700/70 bg-[#0b111e]"}
           ${disabled ? "opacity-50 pointer-events-none" : "cursor-pointer hover:border-sky-500/60"}`}
         onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
         onDragLeave={() => setDragging(false)}
@@ -69,7 +67,6 @@ export default function ImageUpload({ onImageSelect, onPreviewObjectUrl, disable
           <img src={preview} alt="미리보기" className="mx-auto max-h-64 rounded-lg object-contain" />
         ) : (
           <div className="text-slate-400">
-            <p className="text-4xl mb-2">👁️</p>
             <p className="font-medium text-slate-200">안저 이미지를 드래그하거나 클릭하여 업로드</p>
             <p className="text-sm mt-1">JPG · PNG · TIFF / 최대 20MB</p>
           </div>

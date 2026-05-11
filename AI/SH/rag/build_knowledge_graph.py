@@ -5,7 +5,7 @@ AI/SH/rag/build_knowledge_graph.py
 
 사용 전:
   1. chunk_and_embed 실행으로 DB 채워진 상태
-  2. Gemini API 키 (예: GEMINI_API_KEY 또는 GOOGLE_API_KEY 환경 변수)
+  2. Vertex AI용 GCP 설정 (.env: 프로젝트·리전·GOOGLE_APPLICATION_CREDENTIALS 등)
 
 실행:
   cd D:\\MediCore\\AI
@@ -38,49 +38,47 @@ ENTITIES_JSONL = DATA_DIR / "entities.jsonl"
 META_JSON = DATA_DIR / "meta.json"
 
 MODULE_TAG = "eyes"
-GEMINI_MODEL = "gemini-1.5-flash"
+GEMINI_MODEL = "gemini-2.5-flash-lite"
 MAX_CONTENT_CHARS = 3500
 
-EXTRACTION_PROMPT = """You are extracting a knowledge graph from ophthalmology guideline text.
+EXTRACTION_PROMPT = """Extract a clinical knowledge graph from the ophthalmology guideline text.
 
-Return VALID JSON ONLY. No markdown, no explanation.
+[STRICT INSTRUCTIONS]
+1. Return VALID JSON ONLY. No markdown, no ```json, no preamble, no explanation.
+2. Extract ONLY the TOP 15 most clinically significant entities and relations.
+3. Ensure ALL JSON braces and brackets are properly closed.
+4. If nothing is extractable, return: {"entities": [], "relations": []}
 
-Schema exactly:
+[SCHEMA]
 {
   "entities": [
-    {"id": "<lowercase_slug>", "type": "<disease|drug|procedure|finding|risk|stage|other>"}
+    {"id": "lowercase_slug", "type": "disease|drug|procedure|finding|risk|stage|other"}
   ],
   "relations": [
     {
-      "from": "<entity_id>",
-      "relation": "<predicate_snake_case>",
-      "to": "<entity_id>",
-      "source_chunk_id": <integer same as chunk_id below>
+      "from": "entity_id",
+      "relation": "predicate_snake_case",
+      "to": "entity_id",
+      "source_chunk_id": CHUNK_ID_PLACEHOLDER
     }
   ]
 }
 
-Rules:
-- Use English slug ids (e.g. glaucoma, topical_beta_blockers).
-- relations[].source_chunk_id MUST equal the chunk_id given below.
-- If nothing extractable: {{"entities": [], "relations": []}}
+[RULES]
+- IDs must be lowercase snake_case (e.g., "wet_amd", "anti_vegf").
+- source_chunk_id MUST BE EXACTLY: CHUNK_ID_PLACEHOLDER
+- Output: JSON object only. No comments, no trailing text.
 
-chunk_id={chunk_id}
-
-text:
-{text}
+Text to process:
+TEXT_PLACEHOLDER
 """
 
 
 def _configure_genai():
-    api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
-    if not api_key:
-        print("❌ GEMINI_API_KEY 또는 GOOGLE_API_KEY 를 .env 에 설정하세요.", file=sys.stderr)
-        sys.exit(1)
-    import google.generativeai as genai
+    from SH.llm.vertex_client import _init_vertex
 
-    genai.configure(api_key=api_key)
-    return genai
+    _init_vertex()
+    return None
 
 
 def _strip_json_fence(text: str) -> str:
@@ -114,9 +112,38 @@ def _is_rate_limit_error(exc: BaseException) -> bool:
 
 
 def _extract_entities_json(genai_module, chunk_id: int, content: str) -> dict | None:
-    model = genai_module.GenerativeModel(GEMINI_MODEL)
+    from vertexai.generative_models import (
+        GenerativeModel,
+        GenerationConfig,
+        HarmBlockThreshold,
+        HarmCategory,
+        SafetySetting,
+    )
+
+    model = GenerativeModel(GEMINI_MODEL)
     body = content[:MAX_CONTENT_CHARS]
-    prompt = EXTRACTION_PROMPT.format(chunk_id=chunk_id, text=body)
+    prompt = (
+        EXTRACTION_PROMPT.replace("CHUNK_ID_PLACEHOLDER", str(chunk_id))
+        .replace("TEXT_PLACEHOLDER", body)
+    )
+    safety_settings = [
+        SafetySetting(
+            category=HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
+            threshold=HarmBlockThreshold.BLOCK_NONE,
+        ),
+        SafetySetting(
+            category=HarmCategory.HARM_CATEGORY_HARASSMENT,
+            threshold=HarmBlockThreshold.BLOCK_NONE,
+        ),
+        SafetySetting(
+            category=HarmCategory.HARM_CATEGORY_HATE_SPEECH,
+            threshold=HarmBlockThreshold.BLOCK_NONE,
+        ),
+        SafetySetting(
+            category=HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
+            threshold=HarmBlockThreshold.BLOCK_NONE,
+        ),
+    ]
     max_attempts = 4
     base = 30.0
 
@@ -124,32 +151,49 @@ def _extract_entities_json(genai_module, chunk_id: int, content: str) -> dict | 
         try:
             resp = model.generate_content(
                 prompt,
-                generation_config={
-                    "temperature": 0.1,
-                    "max_output_tokens": 2048,
-                },
+                generation_config=GenerationConfig(
+                    temperature=0.1,
+                    max_output_tokens=4096,
+                    response_mime_type="application/json",
+                ),
+                safety_settings=safety_settings,
             )
             raw = getattr(resp, "text", None) or ""
             if not raw.strip() and resp.candidates:
                 parts = getattr(resp.candidates[0].content, "parts", []) or []
                 raw = "".join(getattr(p, "text", "") for p in parts)
-            cleaned = _strip_json_fence(raw)
-            return json.loads(cleaned)
+            try:
+                import json_repair
+
+                return json_repair.loads(raw)
+            except Exception:
+                cleaned = _strip_json_fence(raw)
+                return json.loads(cleaned)
         except Exception as e:
+            # 1. API 할당량 초과(Rate Limit)인 경우: 재시도 로직
             if _is_rate_limit_error(e):
                 if attempt + 1 < max_attempts:
                     jitter = random.uniform(0, 10)
                     wait = min(base * (2**attempt) + jitter, 300.0)
                     print(
-                        f"  ⏳ rate limit (chunk id={chunk_id}) "
+                        f"\n  ⏳ rate limit (chunk id={chunk_id}) "
                         f"attempt={attempt + 1}/{max_attempts} · {wait:.1f}s 대기",
                         flush=True,
                     )
                     time.sleep(wait)
                     continue
-                print(f"  ⚠️ chunk id={chunk_id} 재시도 후 포기 · 스킵")
+                print(f"\n  ⚠️ chunk id={chunk_id} 재시도 후 포기 · 스킵")
                 return None
-            print(f"  ⚠️ chunk id={chunk_id} 스킵: {e}")
+            
+            # 2. 그 외 에러(JSON 파싱 에러 등): 상세 로그 출력 후 스킵
+            print(f"\n  ⚠️ chunk id={chunk_id} 스킵 발생")
+            print(f"     에러 내용: {e}")
+            
+            # 로컬 변수에 raw가 존재한다면 (모델 응답은 받았으나 파싱에 실패한 경우) 출력
+            # 'raw' 변수가 할당되기 전(API 호출 자체 실패) 에러가 날 수도 있으므로 체크함
+            raw_text = locals().get('raw', 'N/A (응답 없음)')
+            print(f"     모델 응답(Raw): {repr(raw_text)[:200]}...") # 앞부분 200자만 출력
+            
             return None
 
     return None
@@ -281,7 +325,7 @@ def main():
         print("❌ DATABASE_URL 미설정", file=sys.stderr)
         sys.exit(1)
 
-    genai_module = _configure_genai()
+    _configure_genai()
 
     conn = psycopg2.connect(db_url)
     try:
@@ -307,7 +351,7 @@ def main():
                 print(f"  skip {idx + 1}/{len(chunks)} id={cid} (already in jsonl)", end="\r")
                 continue
 
-            payload = _extract_entities_json(genai_module, cid, content)
+            payload = _extract_entities_json(None, cid, content)
             if payload is None:
                 continue
             line = json.dumps(
