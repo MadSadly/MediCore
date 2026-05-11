@@ -1,10 +1,43 @@
+# --- Web / API Framework ---
+fastapi
+uvicorn
+python-multipart
 
-pip install langgraph langchain-google-genai
-pip install fastapi uvicorn python-multipart
-pip install llama-parse langchain langchain-google-genai chromadb python-dotenv
-pip install psycopg2-binary
-pip install google-genai
-pip install llama-parse psycopg2-binary
-pip install -U langchain langchain-core langchain-google-genai langgraph
-pip install --upgrade langgraph langchain-core
-pip install torch torchvision timm
+# --- Google Cloud & Gemini LLM ---
+google-cloud-aiplatform
+google-auth
+google-genai
+langchain-google-genai
+google-generativeai>=0.5.2
+
+# --- Deep Learning & Vision AI ---
+torch
+torchvision
+timm
+ultralytics
+opencv-python-headless
+grad-cam
+
+# --- Tabular & ML Analysis ---
+pytorch-tabnet
+scikit-learn
+pandas
+shap
+
+# --- LLM / Agent (LangChain & LangGraph) ---
+langchain
+langchain-core
+langchain-community
+langchain-text-splitters
+langgraph
+
+# --- RAG & Vector Database ---
+FlagEmbedding
+chromadb
+llama-parse
+psycopg2-binary
+pgvector
+
+# --- System & Utils ---
+psutil
+python-dotenv

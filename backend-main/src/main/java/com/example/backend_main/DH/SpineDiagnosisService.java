@@ -27,7 +27,7 @@ public class SpineDiagnosisService {
     @Transactional
     public SpineDiagnosisHistory analyzeAndSave(MultipartFile file, String clinicalData) throws Exception {
         // 1. Python AI 서버 주소 (FastAPI 라우터 설정에 맞춤)
-        String aiServerUrl = "http://localhost:8000/api/dh/spine/analyze";
+        String aiServerUrl = "http://192.168.0.13:8000/ai/spine/analyze";
 
         // 2. HTTP 헤더 설정 (Multipart/form-data)
         HttpHeaders headers = new HttpHeaders();
