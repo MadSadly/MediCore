@@ -43,7 +43,7 @@ logger = logging.getLogger(__name__)
 # ── 보안 ─────────────────────────────────────────────────────
 security = HTTPBearer()
 
-router = APIRouter(prefix="/sh", tags=["안과 진단"])
+router = APIRouter(prefix="/ai/sh", tags=["안과 진단"])
 
 
 # ── Lifespan (서버 시작 시 모델 워밍업) ──────────────────────

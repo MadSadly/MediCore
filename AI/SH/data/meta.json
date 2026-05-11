@@ -1,11 +1,11 @@
 {
-  "generated_at_utc": "2026-05-06T07:43:21.117976+00:00",
+  "generated_at_utc": "2026-05-11T04:50:13.895384+00:00",
   "module_tag": "eyes",
   "model": "gemini-2.5-flash-lite",
-  "chunk_total_in_db": 481,
-  "chunks_resume_skipped": 481,
-  "chunks_extracted_ok": 481,
+  "chunk_total_in_db": 0,
+  "chunks_resume_skipped": 0,
+  "chunks_extracted_ok": 0,
   "chunks_new_this_run_approx": 0,
-  "nodes": 4382,
-  "edges": 7741
+  "nodes": 0,
+  "edges": 0
 }

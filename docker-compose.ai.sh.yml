@@ -8,6 +8,7 @@ services:
     restart: unless-stopped
     environment:
       DB_URL: postgresql://medicore:${DB_PASSWORD}@192.168.0.20:5432/medicoredb
+      DATABASE_URL: postgresql://medicore:${DB_PASSWORD}@192.168.0.20:5432/medicoredb
       GCP_PROJECT_ID: ${GCP_PROJECT_ID}
       GCP_LOCATION: ${GCP_LOCATION}
       GEMINI_MODEL: ${GEMINI_MODEL}
@@ -15,7 +16,17 @@ services:
       LANGCHAIN_API_KEY: ${LANGCHAIN_API_KEY}
     volumes:
       - ./secrets/gcp-key.json:/app/secrets/gcp-key.json:ro
-      - ai_models:/app/models
+      # 내 컴퓨터 실제 경로 : 오른쪽은 컨테이너 안의 경로
+      # 포함(COPY)하지 않고, 호스트 볼륨 마운트(Bind Mount) 방식 사용!
+      # 장점
+      # 1. 전송 시간 단축 : 소스 코드만 도커 엔진에 전송
+      # 2. 이미지 다이어트 : 도커 이미지 자체가 가벼워짐
+      # 3. 재빌드 불필요 : 모델을 바꿀 때마다 이미지를 올릴 필요가 없음
+      # 4. 코드와 자원의 분리 : 서버 로직(코드)와 AI 데이터(모델)을 분리해서 관리
+      # 5. 중복 저장 방지 : 동일한 모델을 사용하는 AI 서버 3개를 띄울 때, 이미지에 넣으면 3배 용량 낭비
+      # 6. 데이터 영속성 : 컨테이너 삭제 or 업데이트 시, 모델 파일은 데이터 손실 위험 없음
+      - D:/MediCore/AI/SH/weights:/app/SH/weights:ro
+      - D:/MediCore/AI/SH/data:/app/SH/data
     ports:
       - "8000:8000"
     healthcheck:

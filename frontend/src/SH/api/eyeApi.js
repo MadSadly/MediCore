@@ -1,9 +1,20 @@
 /**
  * Eye AI analysis SSE client.
- * Proxy: /ai -> AI server (vite.config.js)
+ *
+ * 기본: 상대 경로 `/ai/sh/analyze` (nginx `ai-router` 등에서 /ai → AI로 프록시할 때).
+ * 파트너 환경에서 vite 프록시를 못 쓸 때: `frontend/.env` 에
+ *   VITE_SH_AI_ORIGIN=http://192.168.0.32:8000
+ * 처럼 넣고 재시작하면 해당 호스트로 직접 요청합니다.
  */
-
-const ANALYZE_URL = "/ai/sh/analyze";
+function resolveAnalyzeUrl() {
+  const raw =
+    typeof import.meta !== "undefined" && import.meta.env?.VITE_SH_AI_ORIGIN
+      ? String(import.meta.env.VITE_SH_AI_ORIGIN).trim()
+      : "";
+  if (!raw) return "/ai/sh/analyze";
+  const base = raw.replace(/\/$/, "");
+  return `${base}/ai/sh/analyze`;
+}
 
 function parseApiErrorMessage(rawText, status) {
   if (!rawText) return `Request failed (HTTP ${status})`;
@@ -74,7 +85,7 @@ export async function analyzeEye(file, meta, onEvent, abortSignal) {
 
   let res;
   try {
-    res = await fetch(ANALYZE_URL, fetchOpts);
+    res = await fetch(resolveAnalyzeUrl(), fetchOpts);
   } catch (err) {
     if (err?.name === "AbortError") throw err;
     throw new Error("Network connection failed. Check AI server status.");
