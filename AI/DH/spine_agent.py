@@ -11,7 +11,10 @@ class AgentState(TypedDict):
     medical_note: str      # 의학적 소견
     final_report: str      # 환자용 최종 리포트
 
-llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash")
+os.environ["GEMINI_MODEL"] = "gemini-2.5-flash"
+
+llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash")
+print(f"🚨🚨 [최종 검문] 지금 LLM이 쓸 모델은 확실하게: {llm.model} 입니다! 🚨🚨")
 
 # 3. 노드 함수들 정의 (프롬프트 변경)
 def analyze_data(state: AgentState):
@@ -56,7 +59,7 @@ def write_final_report(state: AgentState):
     response = llm.invoke(prompt)
     return {"final_report": response.content}
 
-# 4. 그래프 조립
+# 4. 랭그래프 조립
 workflow = StateGraph(AgentState)
 workflow.add_node("analyzer", analyze_data)
 workflow.add_node("expert", write_medical_note)

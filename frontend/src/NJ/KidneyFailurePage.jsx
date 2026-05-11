@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useParams } from 'react-router-dom'
 import axios from 'axios'
 
-const AI_URL = import.meta.env.VITE_AI_URL || 'http://localhost:8000'
+const AI_URL = import.meta.env.VITE_AI_URL ?? 'http://localhost:8000'
 
 const CKD_STAGES = [
   { key: 'Normal_Stage1', label: '정상/1단계', gfr: 'GFR ≥ 90',  risk: 'LOW',  min: 90  },
@@ -252,6 +252,7 @@ export default function KidneyFailurePage() {
         severity:         result.severity,
         dialysisRequired: result.dialysis_required,
         probabilities:    result.probabilities,
+        ragAnswer:        result.rag_answer || null,
         egfr:             computedEgfr,
         sc:               form.sc   ? parseFloat(form.sc)   : null,
         bu:               form.bu   ? parseFloat(form.bu)   : null,
@@ -263,6 +264,8 @@ export default function KidneyFailurePage() {
         htn:              form.htn  ? 'yes' : 'no',
         dm:               form.dm   ? 'yes' : 'no',
         pe:               form.pe   ? 'yes' : 'no',
+        age:              form.age  ? parseFloat(form.age)  : null,
+        sex:              form.sex  || null,
       }, { headers: { Authorization: `Bearer ${token}` } })
       setSaved(true)
     } catch {
@@ -1015,6 +1018,22 @@ export default function KidneyFailurePage() {
                   {h.description || '기록된 소견이 없습니다.'}
                 </div>
               </div>
+
+              {/* AI 진단 소견 */}
+              {h.ragAnswer && (
+                <div className="bg-[#151921] border border-slate-800 rounded-2xl p-5">
+                  <div className="flex items-center gap-2 mb-4">
+                    <div className="w-5 h-5 rounded bg-blue-600/20 border border-blue-500/30 flex items-center justify-center">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-blue-400"><path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/></svg>
+                    </div>
+                    <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">당시 AI 진단 소견</p>
+                  </div>
+                  <div className="bg-[#0d1117] rounded-xl p-4 border border-slate-800">
+                    <pre className="text-xs text-slate-300 leading-relaxed font-mono whitespace-pre-wrap break-words">{h.ragAnswer}</pre>
+                  </div>
+                </div>
+              )}
+
 
               {/* 치료 권고사항 */}
               <div className="bg-[#151921] border border-slate-800 rounded-2xl p-5">
