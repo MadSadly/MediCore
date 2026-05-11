@@ -1,0 +1,37 @@
+services:
+
+  ai-server:
+    build:
+      context: ./AI
+      dockerfile: DH/Dockerfile # 담현님 파트의 Dockerfile을 바라보도록 수정
+    container_name: medicore-ai-dh # 가이드의 4단계 실행 이름에 맞춤
+    restart: unless-stopped
+
+    env_file:
+      - .env
+
+    environment:
+      # DB 설정 (메인 PC DB 주소)
+      DB_URL: postgresql://medicore:${DB_PASSWORD}@192.168.0.20:5432/medicoredb
+      # 컨테이너 내부에서 키를 찾을 경로
+      GCP_KEY_PATH: /app/secrets/gcp-key.json
+      # 구글 라이브러리가 자동으로 인식하는 환경변수 추가
+      GOOGLE_APPLICATION_CREDENTIALS: /app/secrets/gcp-key.json
+
+    volumes:
+      - ./AI:/app
+      # 핵심 수정: 윈도우의 ./AI/dh/secrets 폴더를 컨테이너 내부로 연결
+      - ./AI/dh/secrets/gcp-key.json:/app/secrets/gcp-key.json:ro
+      - ai_models:/app/models
+
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/ai/spine || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+
+volumes:
+  ai_models:

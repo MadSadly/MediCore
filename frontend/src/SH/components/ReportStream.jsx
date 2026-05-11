@@ -4,9 +4,82 @@
 
 import { useEffect, useRef, useState } from "react";
 
+function renderInlineBold(text) {
+  const parts = text.split(/(\*\*[^*]+\*\*)/g);
+  return parts.map((part, idx) => {
+    if (part.startsWith("**") && part.endsWith("**")) {
+      return (
+        <strong key={`b-${idx}`} className="text-slate-100 font-semibold">
+          {part.slice(2, -2)}
+        </strong>
+      );
+    }
+    return <span key={`t-${idx}`}>{part}</span>;
+  });
+}
+
+function renderMarkdown(text) {
+  if (!text) return null;
+  const lines = text.split("\n");
+  return lines.map((line, idx) => {
+    const trimmed = line.trim();
+    if (!trimmed) return <div key={`br-${idx}`} className="mb-2" />;
+    if (trimmed.startsWith("### ")) {
+      return (
+        <h3 key={`h3-${idx}`} className="text-sm font-semibold text-sky-300 mt-3 mb-1">
+          {renderInlineBold(trimmed.slice(4))}
+        </h3>
+      );
+    }
+    if (trimmed.startsWith("## ")) {
+      return (
+        <h2 key={`h2-${idx}`} className="text-base font-bold text-slate-100 mt-4 mb-1">
+          {renderInlineBold(trimmed.slice(3))}
+        </h2>
+      );
+    }
+    if (trimmed.startsWith("* ") || trimmed.startsWith("- ")) {
+      return (
+        <ul key={`ul-${idx}`}>
+          <li className="ml-4 text-slate-300">{renderInlineBold(trimmed.slice(2))}</li>
+        </ul>
+      );
+    }
+    return (
+      <p key={`p-${idx}`} className="text-slate-300 leading-relaxed">
+        {renderInlineBold(trimmed)}
+      </p>
+    );
+  });
+}
+
 export default function ReportStream({ report, loading, citations }) {
   const bodyRef = useRef(null);
   const [copied, setCopied] = useState(false);
+  const [displayedReport, setDisplayedReport] = useState("");
+
+  useEffect(() => {
+    if (!report) {
+      setDisplayedReport("");
+      return undefined;
+    }
+    if (loading) {
+      setDisplayedReport(report);
+      return undefined;
+    }
+
+    let i = 0;
+    const timer = setInterval(() => {
+      i += 15;
+      setDisplayedReport(report.slice(0, i));
+      if (i >= report.length) {
+        setDisplayedReport(report);
+        clearInterval(timer);
+      }
+    }, 30);
+
+    return () => clearInterval(timer);
+  }, [report, loading]);
 
   useEffect(() => {
     if (!bodyRef.current) return;
@@ -76,9 +149,11 @@ export default function ReportStream({ report, loading, citations }) {
 
       <div
         ref={bodyRef}
-        className="max-h-64 overflow-y-auto text-sm text-slate-200 leading-relaxed whitespace-pre-wrap min-h-16 pr-1 custom-scrollbar"
+        className={`max-h-[48rem] overflow-y-auto text-sm leading-relaxed min-h-16 pr-1 custom-scrollbar ${
+          loading ? "text-slate-200 whitespace-pre-wrap" : "text-slate-300"
+        }`}
       >
-        {report}
+        {loading ? report : renderMarkdown(displayedReport)}
         {loading && (
           <span className="inline-block w-px ml-px font-mono animate-pulse text-sky-400 align-baseline select-none" aria-hidden>
             ▍

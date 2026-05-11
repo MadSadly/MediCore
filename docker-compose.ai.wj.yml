@@ -1,0 +1,29 @@
+services:
+
+  ai-server:
+    build:
+      context: ./AI
+      dockerfile: WJ/Dockerfile
+    container_name: medicore-ai-wj
+    restart: unless-stopped
+    environment:
+      DB_URL: postgresql://medicore:${DB_PASSWORD}@192.168.0.20:5432/medicoredb
+      GCP_PROJECT_ID: ${GCP_PROJECT_ID}
+      GCP_LOCATION: ${GCP_LOCATION}
+      GEMINI_MODEL: ${GEMINI_MODEL}
+      GCP_KEY_PATH: /app/secrets/gcp-key.json
+      LANGCHAIN_API_KEY: ${LANGCHAIN_API_KEY}
+    volumes:
+      - ./secrets/gcp-key.json:/app/secrets/gcp-key.json:ro
+      - ai_models:/app/models
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+
+volumes:
+  ai_models:

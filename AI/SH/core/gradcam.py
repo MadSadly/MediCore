@@ -126,35 +126,47 @@ class GradCAMEngine:
             from pytorch_grad_cam.utils.image import show_cam_on_image
             from pytorch_grad_cam.utils.model_targets import ClassifierOutputTarget
 
+            # 원본 크기 저장
             img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
+            h_orig, w_orig = img_rgb.shape[:2]
+
+            # 모델 입력: 224x224 단순 리사이즈
             img_resized = cv2.resize(img_rgb, (IMG_SIZE, IMG_SIZE))
             img_float = img_resized.astype(np.float32) / 255.0
 
-            input_tensor = torch.from_numpy(
-                ((img_float - IMG_MEAN) / IMG_STD).transpose(2, 0, 1)
-            ).unsqueeze(0).float()
-
+            # input tensor
             model = self._cam.model
             device = next(model.parameters()).device
-            input_tensor = input_tensor.to(device)
+            input_tensor = torch.from_numpy(
+                ((img_float - IMG_MEAN) / IMG_STD).transpose(2, 0, 1)
+            ).unsqueeze(0).float().to(device)
 
+            # GradCAM 실행 (224x224)
             targets = [ClassifierOutputTarget(int(disease_id))]
             grayscale_cam = self._cam(
                 input_tensor=input_tensor,
                 targets=targets,
             )[0]
 
+            cam_min = grayscale_cam.min()
+            cam_max = grayscale_cam.max()
+            if cam_max - cam_min > 1e-8:
+                grayscale_cam = (grayscale_cam - cam_min) / (cam_max - cam_min)
+
+            # 히트맵을 원본 크기로 리사이즈
+            cam_resized = cv2.resize(grayscale_cam, (w_orig, h_orig))
+
+            # 원본 이미지에 오버레이
+            img_orig_float = img_rgb.astype(np.float32) / 255.0
             visualization = show_cam_on_image(
-                img_float,
-                grayscale_cam,
+                img_orig_float,
+                cam_resized,
                 use_rgb=True,
                 colormap=cv2.COLORMAP_JET,
             )
 
-            _, buf = cv2.imencode(
-                ".png",
-                cv2.cvtColor(visualization, cv2.COLOR_RGB2BGR),
-            )
+            # PNG → Base64
+            _, buf = cv2.imencode(".png", cv2.cvtColor(visualization, cv2.COLOR_RGB2BGR))
             return base64.b64encode(buf.tobytes()).decode("utf-8")
 
         except Exception as e:
