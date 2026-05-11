@@ -23,9 +23,17 @@ __pycache__/
 uploads/
 temp/
 
+<<<<<<< HEAD
 # .gitignore 파일 안에 아래 내용을 추가
 out/
 build/
 .gradle/
 .idea/
+<<<<<<< HEAD
+=======
+
+*.joblib
+>>>>>>> 2fe29ece033650043457d4f054459a45ec9e6158
+=======
 .pdf
+>>>>>>> bc7523cb027dde9dcc909d7d0ce653f0cf28338a
