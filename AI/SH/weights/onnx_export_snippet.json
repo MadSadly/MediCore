@@ -1,0 +1,6 @@
+{
+  "onnx_path": "D:\\Models\\AI-finally\\final\\artifacts\\phase_b\\nb014_distill_b1_v4\\student_final_export.onnx",
+  "backbone": "efficientnet_b1",
+  "input_size": 512,
+  "num_classes": 5
+}

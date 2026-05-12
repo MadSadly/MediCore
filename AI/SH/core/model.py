@@ -111,16 +111,17 @@ class EyeModel:
 
     def preprocess(self, img_bgr: np.ndarray) -> np.ndarray:
         """
-        BGR 이미지 → ONNX 입력 텐서 (1, 3, 512, 512)
+        BGR 이미지 → ONNX 입력 텐서 (1, 3, IMG_SIZE, IMG_SIZE)
         - RGB 변환
-        - 512×512 Zero-padding Resize
+        - IMG_SIZE×IMG_SIZE Zero-padding Resize
         - Normalize (ImageNet)
         """
         img = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
 
         # Zero-padding Resize (원본 비율 보존)
         h, w = img.shape[:2]
-        target = 512
+        # ONNX export 입력 크기(현재 224)에 맞춰 리사이즈
+        target = IMG_SIZE
         scale  = target / max(h, w)
         nh, nw = int(h * scale), int(w * scale)
         img    = cv2.resize(img, (nw, nh), interpolation=cv2.INTER_LINEAR)
@@ -134,7 +135,7 @@ class EyeModel:
         # HWC → CHW + Normalize
         img = img.transpose(2, 0, 1).astype(np.float32) / 255.0
         img = (img - IMG_MEAN) / IMG_STD
-        return img[np.newaxis]  # (1, 3, 512, 512)
+        return img[np.newaxis]  # (1, 3, IMG_SIZE, IMG_SIZE)
 
     def _run_inference(self, tensor: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
         """ONNX 추론 실행 → (disease_logits, stage_logits)"""

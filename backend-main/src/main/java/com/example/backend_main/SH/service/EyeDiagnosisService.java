@@ -32,7 +32,7 @@ public class EyeDiagnosisService {
     private final EyeDiagnosisRepository repository;
     private final RestTemplate restTemplate;
 
-    @Value("${ai.server.url:http://localhost:8000}")
+    @Value("${ai.server.url:http://192.168.0.32:8000}")
     private String aiServerUrl;
 
     /**

@@ -62,8 +62,8 @@ server {
     }
 
     # ── SH: 안과질환 ───────────────────────────────────────────────
-    location /ai/eyes/ {
-        proxy_pass http://${WORKER_EYES_IP}:8000/ai/eyes/;
+    location /ai/sh/ {
+        proxy_pass http://${WORKER_EYES_IP}:8000/ai/sh/;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_http_version 1.1;

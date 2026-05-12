@@ -18,7 +18,7 @@ AI/SH/rag/eval/eval_rag.py
 
   [Graph RAG]
   - Seed Node Hit   : 질환명 → 시드 노드 발견율
-  - BFS Reach Count : 깊이 4 BFS 도달 노드 수
+  - BFS Reach Count : graph_rag.MAX_BFS_DEPTH BFS 도달 노드 수
   - Rerank Delta    : Graph 전후 상위 문서 순위 변화
   - Multi-hop Hit   : 복합 질환 케이스에서 연결 추론 성공 여부
 
@@ -31,7 +31,7 @@ import os
 import sys
 import time
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
 # 프로젝트 루트 .env 로드
 _ROOT = Path(__file__).resolve().parents[4]
@@ -48,7 +48,12 @@ USE_REAL = os.getenv("USE_REAL_RETRIEVER", "0").strip() == "1"
 if USE_REAL:
     try:
         from SH.rag.retriever import hybrid_retriever
-        from SH.rag.graph_rag import graph_retriever, graph_builder, _seed_nodes, _get_graph_optional
+        from SH.rag.graph_rag import (
+            graph_retriever,
+            graph_builder,
+            _seed_nodes,
+            _get_graph_optional,
+        )
         hybrid_retriever.load()
         graph_builder.load()
         print("✅ 실제 Retriever 로드 완료")
@@ -58,27 +63,30 @@ if USE_REAL:
         USE_REAL = False
 
 # ── 테스트 쿼리셋 ─────────────────────────────────────────────
-# (disease_name, stage, query, expected_keywords, disease_tag)
-# disease_tag: chunk source 필드의 "disease:xxx" 값과 매칭
-TEST_QUERIES: list[tuple[str, int, str, list[str], str]] = [
+# (disease_name, stage, query, expected_keywords, disease_tag, allowed_tags)
+# disease_tag / allowed_tags: source의 "disease:xxx"; MULTIHOP만 allowed_tags로 다중 허용
+TEST_QUERIES: list[tuple[str, int, str, list[str], str, Optional[list[str]]]] = [
     # ── 난이도 하: 단일 질환 명확한 치료 (BM25 보강 효과 검증) ──
     (
         "녹내장", 2,
         "녹내장 Stage 2 안압 하강 1차 치료제",
         ["IOP", "prostaglandin", "프로스타글란딘", "topical", "intraocular"],
         "glaucoma",
+        None,
     ),
     (
         "백내장", 1,
         "초기 백내장 수술 적응증과 기준",
         ["phacoemulsification", "IOL", "cataract", "lens", "visual acuity"],
         "cataract",
+        None,
     ),
     (
         "황반변성", 2,
         "습성 황반변성 주사 치료 가이드라인",
         ["anti-VEGF", "ranibizumab", "bevacizumab", "aflibercept", "neovascular"],
         "amd",
+        None,
     ),
 
     # ── 난이도 중: 특정 시술 (Dense 의미 검색 효과 검증) ──────
@@ -87,12 +95,14 @@ TEST_QUERIES: list[tuple[str, int, str, list[str], str]] = [
         "증식성 당뇨망막병증 PRP 범망막광응고술 시행 기준",
         ["photocoagulation", "PRP", "neovascularization", "proliferative"],
         "dr",
+        None,
     ),
     (
         "녹내장", 3,
         "진행성 녹내장 수술적 치료 트라베쿨렉토미 적응증",
         ["trabeculectomy", "MIGS", "surgical", "glaucoma drainage"],
         "glaucoma",
+        None,
     ),
 
     # ── 난이도 상: Multi-hop 복합 추론 (Graph RAG 핵심 검증) ──
@@ -100,7 +110,8 @@ TEST_QUERIES: list[tuple[str, int, str, list[str], str]] = [
         "당뇨망막병증", 2,
         "당뇨 동반 녹내장 환자 베타차단제 금기 약물",
         ["beta-blocker", "베타차단제", "contraindication", "masking", "timolol"],
-        "dr",  # dr + glaucoma 복합 → Graph multi-hop
+        "dr",
+        ["dr", "glaucoma"],
     ),
 ]
 
@@ -166,20 +177,26 @@ def _is_relevant(doc: dict[str, Any], keywords: list[str]) -> bool:
     return any(kw.lower() in content for kw in keywords)
 
 
-def _disease_tag_match(doc: dict[str, Any], expected_tag: str) -> bool:
-    """source 필드에서 'disease:xxx' 파싱 후 expected_tag와 비교."""
+def _disease_tag_match(
+    doc: dict[str, Any],
+    expected_tag: str,
+    allowed_tags: Optional[list[str]] = None,
+) -> bool:
+    """source 필드에서 'disease:xxx' 파싱 후 태그 일치 검사."""
     source = doc.get("source", "")
-    # 형식: "... | disease:dr"
-    if "disease:" in source:
-        tag = source.split("disease:")[-1].strip().split()[0].lower()
-        return tag == expected_tag.lower()
-    return False
+    if "disease:" not in source:
+        return False
+    tag = source.split("disease:")[-1].strip().split()[0].lower()
+    if allowed_tags:
+        return tag in [t.lower() for t in allowed_tags]
+    return tag == expected_tag.lower()
 
 
 def _compute_metrics(
     results: list[dict[str, Any]],
     keywords: list[str],
     disease_tag: str,
+    allowed_tags: Optional[list[str]] = None,
 ) -> dict[str, float]:
     """Hit Rate@3, Precision@3, MRR, Disease Match@3 계산."""
     k = len(results)
@@ -195,7 +212,7 @@ def _compute_metrics(
             relevant_count += 1
             if first_hit_rank is None:
                 first_hit_rank = rank
-        if _disease_tag_match(doc, disease_tag):
+        if _disease_tag_match(doc, disease_tag, allowed_tags):
             disease_match_count += 1
 
     return {
@@ -232,9 +249,9 @@ def _eval_graph_metrics(disease_name: str, stage: int) -> dict[str, Any]:
         if G is None:
             return {"seed_count": 0, "bfs_reach": 0, "note": "graph.pkl 없음"}
         seeds = _seed_nodes(G, disease_name, stage)
-        from SH.rag.graph_rag import _multisource_bfs_reachable
+        from SH.rag.graph_rag import MAX_BFS_DEPTH, _multisource_bfs_reachable
         ug = G.to_undirected()
-        reached = _multisource_bfs_reachable(ug, seeds, 4)
+        reached = _multisource_bfs_reachable(ug, seeds, MAX_BFS_DEPTH)
         return {"seed_count": len(seeds), "bfs_reach": len(reached)}
     except Exception as e:
         return {"seed_count": "err", "bfs_reach": str(e)}
@@ -252,7 +269,9 @@ def evaluate():
     hybrid_results_all: list[dict] = []
     graph_results_all:  list[dict] = []
 
-    for idx, (disease, stage, query, keywords, tag) in enumerate(TEST_QUERIES, 1):
+    for idx, (disease, stage, query, keywords, tag, allowed_tags) in enumerate(
+        TEST_QUERIES, 1
+    ):
         label = "[Multi-hop]" if idx - 1 == MULTIHOP_IDX else ""
         print(f"\n[{idx}/{total}] {label} {query[:55]}...")
         print(f"  질환: {disease} Stage {stage} | 기대 태그: {tag}")
@@ -267,7 +286,7 @@ def evaluate():
             hybrid_docs = _mock_hybrid_search(query, disease, stage, top_k=3)
         hybrid_ms = (time.perf_counter() - t0) * 1000
 
-        h_metrics = _compute_metrics(hybrid_docs, keywords, tag)
+        h_metrics = _compute_metrics(hybrid_docs, keywords, tag, allowed_tags)
 
         # ── Graph RAG ─────────────────────────────────────────
         t1 = time.perf_counter()
@@ -279,7 +298,7 @@ def evaluate():
             graph_docs = _mock_graph_refine(hybrid_docs, disease, stage)
         graph_ms = (time.perf_counter() - t1) * 1000
 
-        g_metrics = _compute_metrics(graph_docs, keywords, tag)
+        g_metrics = _compute_metrics(graph_docs, keywords, tag, allowed_tags)
         delta = _rerank_delta(hybrid_docs, graph_docs, keywords)
         gm = _eval_graph_metrics(disease, stage)
 

@@ -1,6 +1,6 @@
 """
 AI/SH/rag/retriever.py
-Hybrid RAG: Dense (pgvector + BGE-M3) + BM25 → RRF 융합
+Hybrid RAG: Dense (pgvector + gemini-embedding-001 768) + BM25 → RRF 융합
 module_tag = 'eyes' 필터 필수 (CLAUDE.md)
 """
 
@@ -96,10 +96,7 @@ def _bm25_order(query: str, docs: list[dict[str, Any]]) -> list[int]:
 
 
 def _rrf_fuse(n_docs: int, bm25_ordered_indices: list[int], k_rrf: int = 60) -> list[int]:
-    """
-    Dense 순위는 SQL 순서 가정 → 인덱스 0..n-1 가 곧 dense rank 순.
-    BM25 순위만 별도 부여 후 RRF 점수 합산.
-    """
+    """Dense 순위(SQL 순서)와 BM25 순위를 RRF 융합."""
     dense_rank = {i: r + 1 for r, i in enumerate(range(n_docs))}
     bm25_rank = {idx: r + 1 for r, idx in enumerate(bm25_ordered_indices)}
     fused: dict[int, float] = {}
@@ -117,29 +114,30 @@ def _rrf_fuse(n_docs: int, bm25_ordered_indices: list[int], k_rrf: int = 60) -> 
 
 
 class HybridRetriever:
-    """BGE-M3 dense + BM25 + RRF, pgvector `module_tag` 필터."""
+    """Gemini embedding dense + BM25 + RRF, pgvector `module_tag` 필터."""
 
     _DENSE_POOL = 50
     _TOP_K_DEFAULT = 3
 
     def __init__(self) -> None:
-        self._model = None
+        self._gemini_ready = False
 
     def load(self) -> None:
-        """BGE-M3 미리 로드 (Cold Start 완화)."""
-        if self._model is not None:
+        """Cold Start 완화: Vertex 초기화 + 클라이언트 로드(유료 추론 호출 없음)."""
+        if self._gemini_ready:
             return
         try:
-            from FlagEmbedding import BGEM3FlagModel
+            from SH.rag.gemini_embeddings import get_embedding_model
 
-            self._model = BGEM3FlagModel("BAAI/bge-m3", use_fp16=True)
-            _LOGGER.info("HybridRetriever: BGEM3FlagModel 로드 완료")
+            get_embedding_model()
+            self._gemini_ready = True
+            _LOGGER.info("HybridRetriever: gemini-embedding-001 준비 완료")
         except Exception as e:
             _LOGGER.exception("HybridRetriever.load 실패: %s", e)
             raise
 
-    def _ensure_model(self) -> None:
-        if self._model is None:
+    def _ensure_ready(self) -> None:
+        if not self._gemini_ready:
             self.load()
 
     def search(
@@ -150,15 +148,13 @@ class HybridRetriever:
         stage: int,
         top_k: int | None = None,
     ) -> list[dict[str, Any]]:
-        """
-        Dense 후보 풀에서 BM25 재순위 후 RRF로 최종 정렬.
-
-        반환 dict: title, content, source, page (선택)
-        """
-        self._ensure_model()
+        """Dense 후보 풀에서 BM25 재순위 후 RRF로 최종 정렬."""
+        self._ensure_ready()
         tk = top_k if top_k is not None else self._TOP_K_DEFAULT
 
-        dense_vec = self._model.encode([query], batch_size=1)["dense_vecs"][0]
+        from SH.rag.gemini_embeddings import embed_query
+
+        dense_vec = embed_query(query)
         vec_lit = "[" + ",".join(str(float(x)) for x in np.asarray(dense_vec).flatten()) + "]"
 
         import psycopg2

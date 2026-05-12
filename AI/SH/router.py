@@ -1,6 +1,6 @@
 """
 AI/SH/router.py
-안과 CDSS — FastAPI 라우터 · POST /ai/sh/analyze (SSE) · POST /ai/sh/analyze/sync (Spring JSON)
+안과 CDSS — FastAPI 라우터 · POST /sh/analyze (SSE) · POST /sh/analyze/sync (Spring JSON)
 OPH-03: 이미지 업로드
 OPH-05: 이미지 유효성 검증
 OPH-06: AI 통합 분석 버튼
@@ -16,6 +16,7 @@ OPH-16: GradCAM 히트맵
 
 import json
 import asyncio
+import logging
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from typing import AsyncGenerator, Any
@@ -36,6 +37,8 @@ from .rag.retriever import hybrid_retriever
 from .rag.graph_rag import graph_builder, graph_retriever
 from .llm.report_generator import generate_report_stream
 
+logger = logging.getLogger(__name__)
+
 
 # ── 보안 ─────────────────────────────────────────────────────
 security = HTTPBearer()
@@ -52,9 +55,8 @@ async def lifespan(app):
         print("✅ EyeModel 워밍업 완료")
     except Exception as e:
         print(f"⚠️ EyeModel 워밍업 실패: {e}")
-    # BGE-M3(HF) 기동 시 로드하면 Hugging Face 다운로드/로딩으로 lifespan이 수십 분~멈춤처럼 보일 수 있음.
-    # HybridRetriever는 search() 첫 호출 시 _ensure_model()으로 지연 로드됨.
-    print("ℹ️ HybridRetriever(BGE-M3)는 첫 RAG 검색 시 로드됩니다.")
+    # HybridRetriever는 Vertex gemini-embedding-001 로 쿼리 임베딩; 첫 RAG 시 네트워크·초기화로 지연 가능.
+    print("ℹ️ HybridRetriever(Gemini 임베딩)는 첫 RAG 검색 시 초기화됩니다.")
     try:
         graph_builder.load()
         print("✅ GraphBuilder 캐시 초기화 완료")
@@ -122,7 +124,7 @@ async def analyze_sync(
 ):
     """
     Spring Boot `EyeDiagnosisService` 호환: 동기 단일 JSON.
-    SSE `/ai/sh/analyze` 와 동일 파이프라인(품질 → DL → RAG → 소견서).
+    SSE `/sh/analyze` 와 동일 파이프라인(품질 → DL → RAG → 소견서).
     """
     request = AnalysisRequest(
         patient_id=patient_id,
@@ -355,8 +357,8 @@ async def _analysis_stream(
                 "data":       text,
             })
             await asyncio.sleep(0)
-    except Exception as e:
-        print(f"⚠️ 소견서 생성 실패: {e}")
+    except Exception:
+        logger.error("소견서 생성 실패 | session_id=%s", session_id, exc_info=True)
         yield _sse_event("error", {
             "error_code": ErrorCode.LLM_GENERATION_FAILED,
             "message":    "소견서 생성에 실패했습니다.",

@@ -6,7 +6,7 @@
  *           → report_chunk* → done
  */
 
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useParams } from "react-router-dom";
 import { analyzeEye } from "./api/eyeApi";
 import ImageUpload from "./components/ImageUpload";
@@ -70,7 +70,7 @@ function friendlyErrorMessage(raw) {
 export default function EyeDiseasePage() {
   const { id: patientId } = useParams();
   const [imageFile, setImageFile] = useState(null);
-  const [previewObjectUrl, setPreviewObjectUrl] = useState(null);
+  const [imagePreviewUrl, setImagePreviewUrl] = useState(null);
   const [step, setStep] = useState(STEPS.IDLE);
   const [dlResult, setDlResult] = useState(null);
   const [emergency, setEmergency] = useState(null);
@@ -85,9 +85,10 @@ export default function EyeDiseasePage() {
   const [inferenceMs, setInferenceMs] = useState(null);
 
   const analyzeAbortRef = useRef(null);
-  const onPreviewObjectUrlChange = useCallback((url) => {
-    setPreviewObjectUrl(url);
-  }, []);
+  const latestDlResultRef = useRef(null);
+  const latestEmergencyRef = useRef(null);
+  const latestInferenceMsRef = useRef(null);
+  const latestQualityScoreRef = useRef(null);
 
   useEffect(() => {
     return () => {
@@ -97,6 +98,10 @@ export default function EyeDiseasePage() {
   }, []);
 
   const clearAnalysisState = () => {
+    setImagePreviewUrl((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
+      return null;
+    });
     setStep(STEPS.IDLE);
     setDlResult(null);
     setEmergency(null);
@@ -109,6 +114,20 @@ export default function EyeDiseasePage() {
     setError(null);
     setQualityScore(null);
     setInferenceMs(null);
+    latestDlResultRef.current = null;
+    latestEmergencyRef.current = null;
+    latestInferenceMsRef.current = null;
+    latestQualityScoreRef.current = null;
+  };
+
+  /** 분석 상태만 초기화한 뒤, 선택된 파일이 있으면 원본 미리보기 URL 재발급 (GradCAM 연동용) */
+  const syncPreviewUrlFromSelectedFile = (fileOverride) => {
+    const file = fileOverride ?? imageFile;
+    if (!file) return;
+    setImagePreviewUrl((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
+      return URL.createObjectURL(file);
+    });
   };
 
   const resetLoading = () => {
@@ -120,6 +139,7 @@ export default function EyeDiseasePage() {
     analyzeAbortRef.current?.abort();
     analyzeAbortRef.current = null;
     clearAnalysisState();
+    syncPreviewUrlFromSelectedFile();
   };
 
   const cancelRunningAnalysis = () => {
@@ -127,6 +147,55 @@ export default function EyeDiseasePage() {
     analyzeAbortRef.current = null;
     resetLoading();
     clearAnalysisState();
+    syncPreviewUrlFromSelectedFile();
+  };
+
+  const saveDiagnosisToBackend = async (inferenceTimeMs, qualityScoreValue) => {
+    try {
+      const latestDlResult = latestDlResultRef.current;
+      if (!latestDlResult?.primary_disease || !patientId) return;
+
+      const diseaseName = latestDlResult.primary_disease.disease_name ?? "미분류";
+      const confidence = Number(latestDlResult.primary_disease.confidence ?? 0);
+      const title = `${diseaseName} ${(confidence * 100).toFixed(1)}%`;
+
+      const stageName = latestDlResult.stage?.stage_name || "";
+      const isEmergency = !!latestEmergencyRef.current?.is_emergency;
+      const summary = isEmergency ? `응급 | ${stageName}` : (stageName || "정상");
+
+      const resultJson = JSON.stringify({
+        primary_disease: latestDlResult.primary_disease,
+        all_scores: latestDlResult.all_scores,
+        stage: latestDlResult.stage,
+        is_emergency: latestEmergencyRef.current?.is_emergency,
+        emergency_level: latestEmergencyRef.current?.emergency_level,
+        inference_time_ms: inferenceTimeMs,
+        quality_score: qualityScoreValue,
+      });
+
+      const createdBy =
+        localStorage.getItem("name") ||
+        localStorage.getItem("email") ||
+        "SH";
+      const token = localStorage.getItem("token");
+
+      await fetch(`/api/patients/${patientId}/diagnoses`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          diseaseType: "eye-disease",
+          title,
+          summary,
+          resultJson,
+          createdBy,
+        }),
+      });
+    } catch (saveErr) {
+      console.warn("안과 진단 결과 저장 실패:", saveErr);
+    }
   };
 
   const handleAnalyze = async () => {
@@ -138,6 +207,7 @@ export default function EyeDiseasePage() {
     const { signal } = controller;
 
     clearAnalysisState();
+    syncPreviewUrlFromSelectedFile(imageFile);
     setStep(STEPS.UPLOADING);
 
     try {
@@ -161,13 +231,16 @@ export default function EyeDiseasePage() {
 
             case "dl_result":
               setDlResult(data.dl_result);
+              latestDlResultRef.current = data.dl_result;
               setInferenceMs(data.inference_time_ms);
+              latestInferenceMsRef.current = data.inference_time_ms;
               setStep(STEPS.DL_DONE);
               setGradcamLoading(true);
               break;
 
             case "emergency":
               setEmergency(data.emergency);
+              latestEmergencyRef.current = data.emergency;
               if (data.emergency?.is_emergency) setShowEmergency(true);
               break;
 
@@ -190,13 +263,27 @@ export default function EyeDiseasePage() {
               break;
 
             case "done":
-              resetLoading();
-              if (data.inference_time_ms != null) setInferenceMs(data.inference_time_ms);
-              if (data.quality_score != null) setQualityScore(data.quality_score);
-              setStep(STEPS.DONE);
+              void (async () => {
+                resetLoading();
+                let finalInferenceMs = latestInferenceMsRef.current;
+                let finalQualityScore = latestQualityScoreRef.current;
+                if (data.inference_time_ms != null) {
+                  finalInferenceMs = data.inference_time_ms;
+                  setInferenceMs(data.inference_time_ms);
+                  latestInferenceMsRef.current = data.inference_time_ms;
+                }
+                if (data.quality_score != null) {
+                  finalQualityScore = data.quality_score;
+                  setQualityScore(data.quality_score);
+                  latestQualityScoreRef.current = data.quality_score;
+                }
+                await saveDiagnosisToBackend(finalInferenceMs, finalQualityScore);
+                setStep(STEPS.DONE);
+              })();
               break;
 
             case "error":
+              console.error("[SH analyze] SSE error event:", data);
               setError(friendlyErrorMessage(data.message));
               resetLoading();
               setStep(STEPS.ERROR);
@@ -210,6 +297,7 @@ export default function EyeDiseasePage() {
       );
     } catch (err) {
       if (isAbortError(err)) return;
+      console.error("[SH analyze] request failed:", err);
       setError(friendlyErrorMessage(err.message));
       resetLoading();
       setStep(STEPS.ERROR);
@@ -228,9 +316,15 @@ export default function EyeDiseasePage() {
     /* GradCAM 도착 전: step은 dl_done이지만 파이프라인은 진행 중 */
     (step === STEPS.DL_DONE && gradcamLoading);
 
+  const isDashboardMode = step === STEPS.DONE && !!dlResult;
+  const primaryDisease = dlResult?.primary_disease;
+  const primaryConfidence = primaryDisease?.confidence ?? 0;
+  const primaryStage = dlResult?.stage?.stage_name || "미분류";
+  const emergencyLevel = emergency?.emergency_level ?? 0;
+
   return (
     <div className="min-h-screen bg-[#0f172a] text-slate-100 pb-10">
-      <div className="max-w-2xl mx-auto px-4 py-6 space-y-5">
+      <div className="max-w-5xl mx-auto px-4 py-6 space-y-5">
 
         {showEmergency && (
           <EmergencyModal
@@ -239,22 +333,29 @@ export default function EyeDiseasePage() {
           />
         )}
 
-        <div>
-          <h1 className="text-xl font-bold text-slate-100">안과 AI 진단</h1>
-          <p className="text-sm text-slate-400 mt-0.5">
-            환자 {!patientId ? "(ID 없음)" : `#${patientId}`} · 안저 이미지를 업로드하면 AI가 5개 질환을 분석합니다.
-          </p>
-        </div>
-
-        <AiDisclaimer />
+        <header className="overflow-hidden rounded-xl border border-slate-800/70 bg-[#0b111e] shadow-[0_12px_40px_-18px_rgba(0,0,0,0.55)]">
+          <div className="h-[3px] w-full shrink-0 bg-emerald-500" aria-hidden />
+          <div className="px-4 pt-5 pb-5 sm:px-5">
+            <h1 className="text-xl font-bold tracking-tight text-white">안과 AI 진단</h1>
+            <p className="mt-1.5 text-sm text-slate-400 leading-snug">
+              환자 {!patientId ? "(ID 없음)" : `#${patientId}`} · 안저 이미지를 업로드하면 AI가 5개 질환을 분석합니다.
+            </p>
+          </div>
+        </header>
 
         <ImageUpload
-          onImageSelect={setImageFile}
-          onPreviewObjectUrl={onPreviewObjectUrlChange}
+          onImageSelect={(file, _previewUrlFromChild) => {
+            void _previewUrlFromChild;
+            setImageFile(file);
+            setImagePreviewUrl((prev) => {
+              if (prev) URL.revokeObjectURL(prev);
+              return file ? URL.createObjectURL(file) : null;
+            });
+          }}
           disabled={isRunning}
         />
 
-        <AnalysisStepper step={step} gradcamLoading={gradcamLoading} />
+        {(isRunning || step !== STEPS.DONE) && <AnalysisStepper step={step} />}
 
         {step !== STEPS.IDLE && (
           <div
@@ -313,22 +414,93 @@ export default function EyeDiseasePage() {
           </button>
         </div>
 
-        {dlResult && <DiagnosisResult dlResult={dlResult} />}
+        {!isDashboardMode && dlResult && <DiagnosisResult dlResult={dlResult} />}
 
-        {(gradcamLoading || gradcamB64) && (
+        {!isDashboardMode && (gradcamLoading || gradcamB64) && (
           <GradCAMViewer
             gradcamBase64={gradcamB64}
-            originalObjectUrl={previewObjectUrl}
+            originalObjectUrl={imagePreviewUrl}
             loading={gradcamLoading}
           />
         )}
 
-        {(reportLoading || report) && (
+        {!isDashboardMode && (reportLoading || report) && (
           <ReportStream
             report={report}
             loading={reportLoading}
             citations={citations}
           />
+        )}
+
+        {isDashboardMode && (
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <div
+                className={`rounded-2xl p-5 bg-slate-800/60 border ${
+                  emergency?.is_emergency ? "border-red-500" : "border-slate-700"
+                }`}
+              >
+                <div className="space-y-3">
+                  {imagePreviewUrl && (
+                    <img
+                      src={imagePreviewUrl}
+                      alt="분석 원본 이미지"
+                      className="w-full max-h-64 object-contain rounded-xl border border-slate-700 bg-black/30"
+                    />
+                  )}
+                  <div className="grid grid-cols-4 divide-x divide-slate-700 text-center rounded-xl bg-slate-900/40 border border-slate-700/70">
+                    <div className="py-2 px-1">
+                      <p className="text-xs text-slate-500">질환</p>
+                      <p className="text-lg font-bold text-slate-100 truncate">
+                        {primaryDisease?.disease_name || "진단 없음"}
+                      </p>
+                    </div>
+                    <div className="py-2 px-1">
+                      <p className="text-xs text-slate-500">확신도</p>
+                      <p className="text-lg font-bold text-red-400">
+                        {(primaryConfidence * 100).toFixed(1)}%
+                      </p>
+                    </div>
+                    <div className="py-2 px-1">
+                      <p className="text-xs text-slate-500">중증도</p>
+                      <p className="text-sm font-medium text-slate-200">
+                        {primaryStage}
+                      </p>
+                    </div>
+                    <div className="py-2 px-1">
+                      <p className="text-xs text-slate-500">응급</p>
+                      <span
+                        className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold border ${
+                          emergency?.is_emergency
+                            ? "bg-rose-500/20 border-rose-500/60 text-rose-200"
+                            : "bg-slate-700/70 border-slate-600 text-slate-200"
+                        }`}
+                      >
+                        {emergencyLevel}/3
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <DiagnosisResult dlResult={dlResult} />
+            </div>
+
+            {(gradcamLoading || gradcamB64) && (
+              <GradCAMViewer
+                gradcamBase64={gradcamB64}
+                originalObjectUrl={imagePreviewUrl}
+                loading={gradcamLoading}
+              />
+            )}
+
+            {(reportLoading || report) && (
+              <ReportStream
+                report={report}
+                loading={reportLoading}
+                citations={citations}
+              />
+            )}
+          </div>
         )}
 
         {qualityScore !== null && step === STEPS.DONE && (
@@ -337,7 +509,7 @@ export default function EyeDiseasePage() {
           </p>
         )}
 
-        <AiDisclaimer className="opacity-90" />
+        <AiDisclaimer />
       </div>
     </div>
   );
