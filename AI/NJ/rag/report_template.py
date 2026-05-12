@@ -189,6 +189,30 @@ def get_report_parser() -> PydanticOutputParser:
     return PydanticOutputParser(pydantic_object=ReportSections)
 
 
+_EARLY_STAGE_FOCUS = {
+    "Normal_Stage1": (
+        "이 환자는 신기능이 정상이거나 1단계입니다. "
+        "치료 목표는 '진행 예방'과 '위험 요인 관리'입니다. "
+        "약물 처방은 단백뇨·고혈압·당뇨 동반 여부에 따라 ACE억제제/ARB, SGLT2억제제 사용 기준을 구체적으로 작성하세요. "
+        "추적 검사는 연 1회 기준으로 항목별 주기를 명시하세요."
+    ),
+    "Stage2": (
+        "이 환자는 CKD 2단계(경도 신기능 저하)입니다. "
+        "치료 목표는 '진행 억제'와 '심혈관 위험 감소'입니다. "
+        "ACE억제제/ARB의 신장 보호 효과, SGLT2억제제 적응증, 혈압 목표(130/80 mmHg 미만)를 구체적으로 작성하세요. "
+        "추적 검사는 6개월 주기 기준으로 항목별로 명시하세요."
+    ),
+    "Stage3": (
+        "이 환자는 CKD 3단계(중등도 신기능 저하)입니다. "
+        "합병증(빈혈, 대사성 산증, 골미네랄 이상, 고칼륨혈증) 관리가 핵심입니다. "
+        "각 합병증에 대한 약물 기준(ESA, 철분제, 인결합제, 활성비타민D 등)과 시작 기준을 구체적으로 작성하세요. "
+        "추적 검사는 3개월 주기 기준으로 항목별로 명시하세요."
+    ),
+}
+
+_EARLY_STAGES = frozenset({"Normal_Stage1", "Stage2", "Stage3"})
+
+
 def build_lc_prompt(
     prediction: str,
     input_data: dict,
@@ -217,11 +241,27 @@ def build_lc_prompt(
 
     clinical_q = query or f"{prediction} 단계 환자의 치료 계획"
 
+    if prediction in _EARLY_STAGES:
+        guideline_rule = (
+            "아래 KDIGO 가이드라인 참고자료를 우선 근거로 활용하십시오.\n"
+            "참고자료에 명시되지 않은 내용은 신장내과 표준 진료 지침을 보완하여 작성하십시오.\n"
+            "단, 근거 없는 추측은 삼가고 구체적인 수치(목표 혈압, 약물 용량 기준, 검사 주기 등)를 반드시 포함하십시오.\n"
+            "'가이드라인에 없다', '지침이 없다'는 표현은 절대 사용하지 마십시오.\n"
+        )
+        stage_focus = _EARLY_STAGE_FOCUS.get(prediction, "")
+        stage_focus_block = f"\n[단계별 작성 방향]\n{stage_focus}\n" if stage_focus else ""
+    else:
+        guideline_rule = (
+            "아래 KDIGO 가이드라인 참고자료만을 근거로 작성하십시오.\n"
+            "추측이나 가이드라인에 없는 내용을 절대 작성하지 마십시오.\n"
+        )
+        stage_focus_block = ""
+
     return (
         "[지시사항]\n"
         "반드시 한국어로만 작성하십시오. 영어·외국어 절대 금지.\n"
-        "아래 KDIGO 가이드라인 참고자료만을 근거로 작성하십시오.\n"
-        "추측이나 가이드라인에 없는 내용을 절대 작성하지 마십시오.\n\n"
+        f"{guideline_rule}"
+        f"{stage_focus_block}\n"
         "[환자 임상 정보]\n"
         f"CKD 단계: {meta[0]} ({meta[2]}, {meta[1]})\n"
         f"임상 수치: {vals_str}\n"
