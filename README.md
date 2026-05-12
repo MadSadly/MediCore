@@ -28,30 +28,30 @@
                         Cloudflare Tunnel
                                │
               ┌────────────────▼────────────────┐
-              │       Master PC (192.168.0.20)   │
-              │                                  │
-              │  ┌──────────┐  ┌──────────────┐  │
-              │  │  React   │  │ Spring Boot  │  │
-              │  │  :80     │  │   :8080      │  │
-              │  └────┬─────┘  └──────┬───────┘  │
-              │       │  nginx ai-router :3000    │
-              │       └────────┬───────┘          │
-              │  ┌─────────────┤                  │
-              │  │ PostgreSQL  │ Redis             │
-              │  │ :5432       │ :6379             │
-              │  │ (pgvector)  │                  │
-              │  └─────────────┘                  │
-              └──────────────┬──────────────────-─┘
+              │       Master PC (192.168.0.20)  │
+              │                                 │
+              │  ┌──────────┐  ┌──────────────┐ │
+              │  │  React   │  │ Spring Boot  │ │
+              │  │  :80     │  │   :8080      │ │
+              │  └────┬─────┘  └──────┬───────┘ │
+              │       │  nginx ai-router :3000  │
+              │       └────────┬───────┘        │
+              │  ┌─────────────┤                │
+              │  │ PostgreSQL  │ Redis          │
+              │  │ :5432       │ :6379          │
+              │  │ (pgvector)  │                │
+              │  └─────────────┘                │
+              └──────────────┬──────────────────┘
                              │ 유선 LAN (기가비트)
           ┌──────────────────┼──────────────────┐
           │                  │                  │
 ┌─────────▼───────┐ ┌────────▼───────┐ ┌────────▼───────┐
-│  NJ — 신부전     │ │  WJ — 뇌종양    │ │  DH — 척추      │
+│  NJ — 신부전     │ │  WJ — 뇌종양   │ │  DH — 척추     │
 │  192.168.0.5    │ │  192.168.0.9   │ │  192.168.0.13  │
 │  FastAPI :8000  │ │  FastAPI :8000 │ │  FastAPI :8000 │
 └─────────────────┘ └────────────────┘ └────────────────┘
 ┌─────────▼───────┐ ┌────────▼───────┐ 
-│  SH — 안과       │ │  MS — 피부     │ 
+│  SH — 안과      │ │  MS — 피부      │ 
 │  192.168.0.32   │ │  192.168.0.??  │ 
 │  FastAPI :8000  │ │  FastAPI :8000 │
 └─────────────────┘ └────────────────┘ 
@@ -61,12 +61,12 @@
 ```
 브라우저 → nginx ai-router(:3000)
   ├── /api/**         → Spring Boot(:8080)  → PostgreSQL / Redis
-  ├── /ai/kidney/**   → NJ Worker(:8000)    → TabNet + RAG
+  ├── /ai/kidney/**   → NJ Worker(:8000)    → 신부전 모델 + RAG
   ├── /ai/brain/**    → WJ Worker(:8000)    → 뇌종양 모델 + RAG
   ├── /ai/spine/**    → DH Worker(:8000)    → 척추 모델 + RAG
   ├── /ai/sh/**       → SH Worker(:8000)    → 안과 모델 + RAG
-  ├── /ai/skin/**     → MS Worker(:8000)    → 피부 모델 + RAG
-  └── /ai/colon/**    → GW Worker(:8000)    → 대장암 모델 + RAG
+  └── /ai/skin/**     → MS Worker(:8000)    → 피부 모델 + RAG
+
 ```
 
 ---
@@ -260,7 +260,6 @@ main  ←── feature/kidney  (NJ)
       ←── feature/spine   (DH)
       ←── feature/eyes    (SH)
       ←── feature/skin    (MS)
-      ←── feature/colon   (GW)
 ```
 
 - `main`에 직접 push 금지 — PR을 통해 머지
@@ -345,7 +344,6 @@ MediCore/
 │       │   ├── auth/              ← JWT 인증 (수정 금지)
 │       │   ├── SecurityConfig.java (수정 금지)
 │       │   ├── worker/            ← Circuit Breaker 헬스체크
-│       │   ├── NJ/                ← 신부전 API
 │       │   └── [이니셜]/          ← 각 담당자 API
 │       └── resources/
 │           ├── application.properties
@@ -357,13 +355,13 @@ MediCore/
 ├── frontend/
 │   └── src/
 │       ├
-│       ├── WJ/ DH/ SH/ MS/ GW/   ← 각 담당자 페이지
+│       ├── WJ/ DH/ SH/ MS/ NJ/   ← 각 담당자 페이지
 │       ├── App.jsx                ← 라우팅 (수정 금지)
 │       └── pages/                 ← 공통 페이지 (수정 금지)
 │
 ├── AI/
 │   │ 
-│   ├── WJ/ DH/ SH/ MS/ GW/ NJ/    ← 각 담당자 AI 모듈
+│   ├── WJ/ DH/ SH/ MS/ NJ/        ← 각 담당자 AI 모듈
 │   ├── main.py                    ← 통합 진입점 (수정 금지)
 │   └── requirements.txt           ← 공통 패키지 (수정 금지)
 │
