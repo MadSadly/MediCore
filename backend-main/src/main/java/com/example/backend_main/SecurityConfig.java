@@ -7,6 +7,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -16,6 +17,8 @@ import org.springframework.security.web.header.writers.ReferrerPolicyHeaderWrite
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+import org.springframework.core.annotation.Order;
+import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 
 import java.util.Arrays;
 import java.util.List;
@@ -31,10 +34,11 @@ public class SecurityConfig {
     private String allowedOriginsRaw;
 
     @Bean
+    @Order
     SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
             .cors(cors -> cors.configurationSource(corsConfigurationSource()))
-            .csrf(csrf -> csrf.disable())
+            .csrf(AbstractHttpConfigurer::disable) // 메서드 레퍼런스 방식 - 더 명시적(람다 대비)
             .formLogin(form -> form.disable())
             .httpBasic(basic -> basic.disable())
             .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
@@ -57,7 +61,7 @@ public class SecurityConfig {
                         "script-src 'self' 'unsafe-inline'; " +
                         "style-src 'self' 'unsafe-inline'; " +
                         "img-src 'self' data: blob:; " +
-                        "connect-src 'self'"
+                        "connect-src 'self' http://192.168.0.5:8000 http://192.168.0.9:8000 http://192.168.0.32:8000 http://192.168.0.39:8000 http://192.168.0.73:8000"
                     )
                 )
             )
@@ -65,6 +69,7 @@ public class SecurityConfig {
 
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers(
+                    "/error", // 추가: 예외 -> /error -> 403 방지
                     "/actuator/health",
                     "/api/auth/**",
                     "/api/workers/**"
