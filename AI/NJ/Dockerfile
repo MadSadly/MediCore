@@ -7,7 +7,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends     curl     li
 # Build context: AI/ 디렉토리에서 실행
 # docker build -f NJ/Dockerfile .
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+COPY NJ/requirements.txt ./NJ_requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt && \
+    pip install --no-cache-dir -r NJ_requirements.txt
 
 COPY NJ/ ./NJ/
 
