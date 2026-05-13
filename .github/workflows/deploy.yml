@@ -1,0 +1,174 @@
+name: Deploy MEDI-Zero
+
+# CI 워크플로우 통과 후 자동 실행 (main 브랜치 한정)
+# workflow_dispatch: GitHub UI에서 수동 트리거 가능
+on:
+  workflow_run:
+    workflows: ["CI"]
+    branches: [main]
+    types: [completed]
+  workflow_dispatch:
+
+defaults:
+  run:
+    shell: bash
+
+# ────────────────────────────────────────────────────────────────────
+# GitHub Secrets 필수 등록 목록 (Settings → Secrets → Actions)
+#
+#   DB_PASSWORD           PostgreSQL 비밀번호
+#   REDIS_PASSWORD        Redis 비밀번호
+#   GCP_PROJECT_ID        Google Cloud 프로젝트 ID
+#   GCP_LOCATION          Vertex AI 리전 (예: us-central1)
+#   GEMINI_MODEL          Gemini 모델명 (예: gemini-1.5-flash-002)
+#   LANGCHAIN_API_KEY     LangSmith 추적 API 키
+#   CORS_ALLOWED_ORIGINS  CORS 허용 오리진 (예: http://192.168.0.20:3000)
+#   SSH_PRIVATE_KEY       Master PC → Worker PC SSH 개인키 (PEM 형식)
+#   WORKER_SSH_USER       워커 PC SSH 사용자명 (모든 워커 동일 계정)
+#   WORKER_REPO_PATH      워커 PC 레포 경로 (예: /c/Users/username/MediCore)
+#
+# Self-hosted Runner 설치 대상: Master PC (192.168.0.20)
+#   GitHub → Settings → Actions → Runners → New self-hosted runner
+# ────────────────────────────────────────────────────────────────────
+
+jobs:
+  deploy:
+    name: Deploy to Production (4 PCs)
+    runs-on: self-hosted
+
+    # CI 실패 시 배포 중단, 수동 트리거는 항상 실행
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
+
+    timeout-minutes: 30
+
+    env:
+      NJ_IP: 192.168.0.5
+      DH_IP: 192.168.0.13
+      SH_IP: 192.168.0.32
+
+    steps:
+      # ── 소스 체크아웃 ────────────────────────────────────────────
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ── SSH 키 설정 ──────────────────────────────────────────────
+      - name: Setup SSH key
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          printf 'Host 192.168.0.*\n  IdentityFile ~/.ssh/deploy_key\n  StrictHostKeyChecking no\n  UserKnownHostsFile /dev/null\n  ConnectTimeout 10\n' >> ~/.ssh/config
+
+      # ── .env 파일 생성 ───────────────────────────────────────────
+      - name: Create .env
+        run: |
+          {
+            echo "DB_PASSWORD=${{ secrets.DB_PASSWORD }}"
+            echo "REDIS_PASSWORD=${{ secrets.REDIS_PASSWORD }}"
+            echo "GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }}"
+            echo "GCP_LOCATION=${{ secrets.GCP_LOCATION }}"
+            echo "GEMINI_MODEL=${{ secrets.GEMINI_MODEL }}"
+            echo "GCP_KEY_PATH=/app/secrets/gcp-key.json"
+            echo "LANGCHAIN_API_KEY=${{ secrets.LANGCHAIN_API_KEY }}"
+            echo "CORS_ALLOWED_ORIGINS=${{ secrets.CORS_ALLOWED_ORIGINS }}"
+          } > .env
+
+      # ════════════════════════════════════════════════════════════
+      # 1단계 — Master PC: 서버 스택 배포
+      #   docker-compose.server.yml: PostgreSQL, Redis, Spring Boot,
+      #   React, nginx ai-router (포트 3000)
+      # ════════════════════════════════════════════════════════════
+      - name: "[1/4] Deploy server stack (Master PC)"
+        run: |
+          docker compose -f docker-compose.server.yml up -d --build --remove-orphans
+
+      - name: "[1/4] Wait for backend health"
+        run: |
+          echo "Spring Boot 기동 대기 중..."
+          for i in $(seq 1 18); do
+            if curl -sf --max-time 5 http://localhost:8080/actuator/health > /dev/null; then
+              echo "Backend ready"
+              break
+            fi
+            [ "$i" -eq 18 ] && echo "Backend 기동 실패 (3분 초과)" && exit 1
+            echo "  [$i/18] 10초 후 재시도..."
+            sleep 10
+          done
+
+      # ════════════════════════════════════════════════════════════
+      # 2단계 — NJ Worker: 신부전 AI 서버 (192.168.0.5)
+      # ════════════════════════════════════════════════════════════
+      - name: "[2/4] Deploy NJ worker (kidney / 192.168.0.5)"
+        run: |
+          scp -i ~/.ssh/deploy_key \
+            .env \
+            "${{ secrets.WORKER_SSH_USER }}@${NJ_IP}:${{ secrets.WORKER_REPO_PATH }}/.env"
+
+          ssh -i ~/.ssh/deploy_key \
+            "${{ secrets.WORKER_SSH_USER }}@${NJ_IP}" \
+            "cd '${{ secrets.WORKER_REPO_PATH }}' && \
+             git pull origin main && \
+             docker compose -f docker-compose.ai.nj.yml up -d --build --remove-orphans"
+
+      # ════════════════════════════════════════════════════════════
+      # 3단계 — DH Worker: 척추 AI 서버 (192.168.0.13)
+      # ════════════════════════════════════════════════════════════
+      - name: "[3/4] Deploy DH worker (spine / 192.168.0.13)"
+        run: |
+          scp -i ~/.ssh/deploy_key \
+            .env \
+            "${{ secrets.WORKER_SSH_USER }}@${DH_IP}:${{ secrets.WORKER_REPO_PATH }}/.env"
+
+          ssh -i ~/.ssh/deploy_key \
+            "${{ secrets.WORKER_SSH_USER }}@${DH_IP}" \
+            "cd '${{ secrets.WORKER_REPO_PATH }}' && \
+             git pull origin main && \
+             docker compose -f docker-compose.ai.dh.yml up -d --build --remove-orphans"
+
+      # ════════════════════════════════════════════════════════════
+      # 4단계 — SH Worker: 안과 AI 서버 (192.168.0.32)
+      # ════════════════════════════════════════════════════════════
+      - name: "[4/4] Deploy SH worker (eyes / 192.168.0.32)"
+        run: |
+          scp -i ~/.ssh/deploy_key \
+            .env \
+            "${{ secrets.WORKER_SSH_USER }}@${SH_IP}:${{ secrets.WORKER_REPO_PATH }}/.env"
+
+          ssh -i ~/.ssh/deploy_key \
+            "${{ secrets.WORKER_SSH_USER }}@${SH_IP}" \
+            "cd '${{ secrets.WORKER_REPO_PATH }}' && \
+             git pull origin main && \
+             docker compose -f docker-compose.ai.sh.yml up -d --build --remove-orphans"
+
+      # ════════════════════════════════════════════════════════════
+      # 헬스체크 — 전체 워커 확인
+      # ════════════════════════════════════════════════════════════
+      - name: Health check — all workers
+        run: |
+          echo "AI 서버 초기화 대기 중 (60s)..."
+          sleep 60
+
+          failed=0
+          check() {
+            local name=$1 ip=$2
+            if curl -sf --max-time 10 "http://$ip:8000/health" > /dev/null; then
+              echo "  OK  $name ($ip)"
+            else
+              echo "  FAIL  $name ($ip) — 응답 없음"
+              failed=$((failed + 1))
+            fi
+          }
+
+          check "NJ (kidney)" "$NJ_IP"
+          check "DH (spine)"  "$DH_IP"
+          check "SH (eyes)"   "$SH_IP"
+
+          [ $failed -gt 0 ] && echo "$failed 개 워커 헬스체크 실패" && exit 1
+          echo "모든 워커 정상"
+
+      # ── 정리 (항상 실행) ─────────────────────────────────────────
+      - name: Cleanup SSH key
+        if: always()
+        run: rm -f ~/.ssh/deploy_key
