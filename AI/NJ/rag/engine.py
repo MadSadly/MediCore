@@ -16,6 +16,8 @@ LLM 백엔드 우선순위:
 from __future__ import annotations
 
 import os
+import hashlib
+import json
 import logging
 from pathlib import Path
 
@@ -30,6 +32,47 @@ from .report_template import (
 
 logger = logging.getLogger("medicore.kidney.rag")
 
+# ── Redis RAG 캐시 ────────────────────────────────────────────────
+try:
+    import redis as _redis_module
+    _REDIS_AVAILABLE = True
+except ImportError:
+    _REDIS_AVAILABLE = False
+
+_redis_client = None
+_CACHE_TTL    = int(os.getenv("RAG_CACHE_TTL", "86400"))  # 기본 24시간
+
+
+def _get_redis():
+    global _redis_client
+    if _redis_client is not None:
+        return _redis_client if _redis_client is not False else None
+    if not _REDIS_AVAILABLE:
+        return None
+    try:
+        client = _redis_module.Redis(
+            host=os.getenv("REDIS_HOST", "192.168.0.20"),
+            port=int(os.getenv("REDIS_PORT", "6379")),
+            password=os.getenv("REDIS_PASSWORD") or None,
+            decode_responses=True,
+            socket_connect_timeout=2,
+            socket_timeout=2,
+        )
+        client.ping()
+        _redis_client = client
+        logger.info("Redis RAG 캐시 연결 성공")
+    except Exception as e:
+        logger.warning(f"Redis 연결 실패 — 캐시 없이 동작: {e}")
+        _redis_client = False
+    return _redis_client if _redis_client is not False else None
+
+
+def _cache_key(prediction: str, query: str) -> str:
+    q_hash = hashlib.md5(query.strip().lower().encode()).hexdigest()[:12]
+    return f"rag:kidney:{prediction}:{q_hash}"
+
+
+# ─────────────────────────────────────────────────────────────────
 _GCP_PROJECT   = os.getenv("GCP_PROJECT_ID", "")
 USE_VERTEX_LLM = bool(_GCP_PROJECT and _GCP_PROJECT != "placeholder")
 
@@ -201,7 +244,21 @@ def query_and_generate(
     if input_data is None:
         input_data = {}
 
-    main_query  = query or f"CKD {prediction} 치료 관리"
+    main_query = query or f"CKD {prediction} 치료 관리"
+
+    # ── Redis 캐시 확인 ───────────────────────────────────────────
+    redis = _get_redis()
+    key   = _cache_key(prediction, main_query)
+    if redis:
+        try:
+            cached = redis.get(key)
+            if cached:
+                logger.info(f"RAG 캐시 HIT: {key}")
+                return json.loads(cached)
+        except Exception as e:
+            logger.warning(f"Redis 읽기 실패: {e}")
+
+    # ── RAG 검색 + LLM 소견 생성 ─────────────────────────────────
     sub_queries = _STAGE_SUBQUERIES.get(prediction, [])
     contexts    = multi_search([main_query] + sub_queries)
 
@@ -209,8 +266,18 @@ def query_and_generate(
         contexts = search(main_query)
 
     answer = generate(query, prediction, confidence, input_data, contexts)
-    return {
+    result = {
         "answer":   answer,
         "sources":  list({c["source"] for c in contexts}),
         "contexts": len(contexts),
     }
+
+    # ── Redis 캐시 저장 ───────────────────────────────────────────
+    if redis:
+        try:
+            redis.setex(key, _CACHE_TTL, json.dumps(result, ensure_ascii=False))
+            logger.info(f"RAG 캐시 SET: {key} (TTL {_CACHE_TTL}s)")
+        except Exception as e:
+            logger.warning(f"Redis 쓰기 실패: {e}")
+
+    return result
